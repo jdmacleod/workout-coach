@@ -1,0 +1,92 @@
+# Exercise Coach — Configuration
+# Copy to config/config.toml and edit. config.toml is gitignored.
+
+# ── User ──────────────────────────────────────────────────────────────────────
+
+[user]
+name     = "Your Name"
+timezone = "America/Los_Angeles"   # IANA timezone string
+
+# ── LLM Inference ─────────────────────────────────────────────────────────────
+
+[llm]
+# Options: swift | apple | ollama | llamacpp | anthropic
+# swift is the default on macOS 26+; use ollama or anthropic on older systems
+provider = "swift"
+
+[llm.swift]
+# Path to the compiled coach-infer binary (relative to project root)
+binary = "swift/.build/release/CoachInfer"
+
+[llm.apple]
+# Prefix used to identify Exercise Coach shortcuts in Shortcuts.app
+shortcut_prefix = "EC-"
+
+[llm.ollama]
+base_url = "http://localhost:11434"
+model    = "llama3.2"
+
+[llm.llamacpp]
+server_url = "http://localhost:8080"
+model_path = "~/models/mistral-7b-instruct.gguf"   # informational only
+
+[llm.anthropic]
+model = "claude-sonnet-4-20250514"
+# API key is read from the ANTHROPIC_API_KEY environment variable.
+# Do not paste your API key into this file.
+
+# ── User Profile (cold-start onboarding) ─────────────────────────────────────
+# Written by `coach setup`. Values are injected into the planning prompt.
+
+[profile]
+fitness_days_per_week = 4
+primary_goal          = "general fitness"   # strength | endurance | general fitness | weight loss | sport-specific
+injury_notes          = ""                  # free text; empty means none
+
+# ── Apple Notes ───────────────────────────────────────────────────────────────
+
+[notes]
+account = "iCloud"            # Must match the account name in Notes.app exactly
+folder  = "Exercise Coach"    # Root folder; subfolders are created by setup
+
+# ── Data Paths ────────────────────────────────────────────────────────────────
+# All paths are relative to the project root.
+
+[data]
+training_info   = "data/training-info.md"
+workouts_dir    = "data/workouts/"
+plans_dir       = "data/plans/"
+assessments_dir = "data/assessments/"
+
+# ── Calendar Integration ──────────────────────────────────────────────────────
+
+[calendar]
+enabled = false
+
+# Sources tried in order. Options: manual | apple | google | ics
+sources = ["manual", "apple"]
+
+# Calendar display names to search (Apple Calendar or Google Calendar)
+calendars = ["Yoga Studio", "My Calendar"]
+
+# Event title keywords to include (case-insensitive)
+event_patterns = [
+    "yoga", "pilates", "vinyasa", "reformer",
+    "yin", "barre", "ashtanga", "hot yoga", "hatha"
+]
+
+[calendar.recovery_costs]
+# Override default recovery cost (1 = very easy, 5 = very hard) per keyword
+"yin yoga"  = 1
+"vinyasa"   = 2
+"reformer"  = 3
+"hot yoga"  = 4
+
+[calendar.google]
+credentials_file = "config/google-credentials.json"
+token_file       = "config/google-token.json"
+calendar_ids     = ["primary"]
+
+[calendar.ics]
+url  = ""   # Google Calendar private ICS URL (leave blank if not used)
+file = ""   # Path to exported .ics file (leave blank if not used)

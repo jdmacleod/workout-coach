@@ -1,0 +1,35 @@
+# === User configuration ===
+config/config.toml
+config/google-credentials.json
+config/google-token.json
+config/*.ics
+
+# === User data ===
+data/training-info.md
+data/workouts/
+data/plans/
+data/assessments/
+data/index.db
+data/*.ics
+
+# === Swift build ===
+swift/.build/
+swift/*.o
+swift/*.d
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# === macOS ===
+.DS_Store
+**/.DS_Store

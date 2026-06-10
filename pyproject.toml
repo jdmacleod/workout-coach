@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "exercise-coach"
+version = "0.1.0"
+description = "Apple Notes-based fitness coaching CLI"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "typer>=0.12",
+    "httpx>=0.27",
+    "icalendar>=5.0",
+    "anthropic>=0.30",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+google = [
+    "google-api-python-client>=2.0",
+    "google-auth-httplib2>=0.2",
+    "google-auth-oauthlib>=1.0",
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+    "mypy>=1.10",
+]
+
+[project.scripts]
+coach = "coach.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["coach"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
