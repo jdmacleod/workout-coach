@@ -1,4 +1,5 @@
 """Unit tests for the provider factory and MockInferenceProvider."""
+
 import pytest
 
 from coach.config import Config, ConfigError, LLMConfig

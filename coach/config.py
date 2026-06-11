@@ -1,6 +1,7 @@
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, cast
 
 
 def _find_project_root() -> Path:
@@ -127,9 +128,7 @@ class ConfigError(Exception):
 
 def load_config() -> Config:
     if not CONFIG_FILE.exists():
-        raise ConfigNotFoundError(
-            f"No config found at {CONFIG_FILE}. Run 'coach setup' first."
-        )
+        raise ConfigNotFoundError(f"No config found at {CONFIG_FILE}. Run 'coach setup' first.")
     with open(CONFIG_FILE, "rb") as f:
         try:
             raw = tomllib.load(f)
@@ -138,8 +137,8 @@ def load_config() -> Config:
     return _parse_config(raw)
 
 
-def _parse_config(raw: dict) -> Config:
-    def _dc(cls, d: dict):  # type: ignore[no-untyped-def]
+def _parse_config(raw: dict[str, Any]) -> Config:
+    def _dc(cls: Any, d: dict[str, Any]) -> Any:
         return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
 
     llm_raw = raw.get("llm", {})
@@ -170,5 +169,5 @@ def _parse_config(raw: dict) -> Config:
 
 
 def resolve_data_path(config: Config, key: str) -> Path:
-    relative = getattr(config.data, key)
+    relative = cast(str, getattr(config.data, key))
     return (PROJECT_ROOT / relative).resolve()

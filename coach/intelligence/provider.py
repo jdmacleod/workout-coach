@@ -3,9 +3,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from coach.config import Config
+from coach.config import Config, ConfigError
 from coach.intelligence.exceptions import InferenceError
-from coach.config import ConfigError
 
 
 @dataclass
@@ -24,7 +23,6 @@ class InferenceResponse:
 
 
 class InferenceProvider(ABC):
-
     def __init__(self, config: Config) -> None:
         self.config = config
 
@@ -39,17 +37,16 @@ class InferenceProvider(ABC):
         ...
 
     @abstractmethod
-    def provider_name(self) -> str:
-        ...
+    def provider_name(self) -> str: ...
 
 
 def get_provider(config: Config) -> InferenceProvider:
     """Resolve the configured provider and verify it is available."""
-    from coach.intelligence.providers.swift import SwiftInferenceProvider
-    from coach.intelligence.providers.apple import AppleIntelligenceProvider
-    from coach.intelligence.providers.ollama import OllamaProvider
-    from coach.intelligence.providers.llamacpp import LlamaCppProvider
     from coach.intelligence.providers.anthropic import AnthropicProvider
+    from coach.intelligence.providers.apple import AppleIntelligenceProvider
+    from coach.intelligence.providers.llamacpp import LlamaCppProvider
+    from coach.intelligence.providers.ollama import OllamaProvider
+    from coach.intelligence.providers.swift import SwiftInferenceProvider
 
     providers: dict[str, type[InferenceProvider]] = {
         "swift": SwiftInferenceProvider,

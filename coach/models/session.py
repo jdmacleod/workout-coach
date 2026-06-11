@@ -8,8 +8,8 @@ class ExternalSession:
     date: date
     start_time: time
     duration_minutes: int
-    source: str           # "manual" | "apple_calendar" | "google_api" | "ics"
+    source: str  # "manual" | "apple_calendar" | "google_api" | "ics"
     calendar_name: str
-    session_type: str     # "yoga" | "pilates" | "unknown"
-    intensity: str        # "low" | "moderate" | "high"
-    recovery_cost: int    # 1–5
+    session_type: str  # "yoga" | "pilates" | "unknown"
+    intensity: str  # "low" | "moderate" | "high"
+    recovery_cost: int  # 1–5

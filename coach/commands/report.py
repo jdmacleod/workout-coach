@@ -1,10 +1,11 @@
 """coach report — display workout trends and statistics."""
+
 from __future__ import annotations
 
 import datetime
 import json
 from collections import defaultdict
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -21,10 +22,14 @@ SUBCOMMANDS = {"summary", "volume", "rpe", "prs", "streak"}
 
 
 def run(
-    subcommand: Annotated[str, typer.Argument(help="Subcommand: summary | volume | rpe | prs | streak")] = "summary",
+    subcommand: Annotated[
+        str, typer.Argument(help="Subcommand: summary | volume | rpe | prs | streak")
+    ] = "summary",
     weeks: Annotated[int, typer.Option("--weeks", help="Lookback window in weeks")] = 8,
-    format: Annotated[str, typer.Option("--format", help="Output format: table | json | csv")] = "table",
-    type: Annotated[Optional[str], typer.Option("--type", help="Filter by workout type")] = None,
+    format: Annotated[
+        str, typer.Option("--format", help="Output format: table | json | csv")
+    ] = "table",
+    type: Annotated[str | None, typer.Option("--type", help="Filter by workout type")] = None,
 ) -> None:
     """Display workout trends and statistics. No Apple Notes access required."""
     try:
@@ -43,7 +48,9 @@ def _run_report(
     workouts: list[Workout] | None = None,  # injectable for testing
 ) -> None:
     if subcommand not in SUBCOMMANDS:
-        err_console.print(f"Unknown subcommand: {subcommand!r}. Use: {', '.join(sorted(SUBCOMMANDS))}")
+        err_console.print(
+            f"Unknown subcommand: {subcommand!r}. Use: {', '.join(sorted(SUBCOMMANDS))}"
+        )
         raise typer.Exit(code=1)
 
     if workouts is None:
@@ -83,14 +90,16 @@ def _report_summary(workouts: list[Workout], *, format: str) -> None:
         avg_rpe = sum(rpes) / len(rpes) if rpes else None
         total_min = sum((w.duration_actual or w.duration_planned or 0) for w in ws)
         focus = next((w.type for w in ws if w.status == "completed"), "—")
-        rows.append({
-            "week": week,
-            "sessions": total,
-            "completed": f"{completed} ({completed/total:.0%})" if total else "0",
-            "avg_rpe": f"{avg_rpe:.1f}" if avg_rpe else "—",
-            "total_min": total_min,
-            "focus": focus,
-        })
+        rows.append(
+            {
+                "week": week,
+                "sessions": str(total),
+                "completed": f"{completed} ({completed / total:.0%})" if total else "0",
+                "avg_rpe": f"{avg_rpe:.1f}" if avg_rpe else "—",
+                "total_min": str(total_min),
+                "focus": focus,
+            }
+        )
 
     if format == "json":
         console.print(json.dumps(rows, indent=2))
@@ -98,7 +107,9 @@ def _report_summary(workouts: list[Workout], *, format: str) -> None:
     if format == "csv":
         console.print("week,sessions,completed,avg_rpe,total_min,focus")
         for r in rows:
-            console.print(f"{r['week']},{r['sessions']},{r['completed']},{r['avg_rpe']},{r['total_min']},{r['focus']}")
+            console.print(
+                f"{r['week']},{r['sessions']},{r['completed']},{r['avg_rpe']},{r['total_min']},{r['focus']}"
+            )
         return
 
     table = Table(title="Workout Summary", show_header=True)
@@ -109,7 +120,9 @@ def _report_summary(workouts: list[Workout], *, format: str) -> None:
     table.add_column("Total Min", justify="right")
     table.add_column("Focus")
     for r in rows:
-        table.add_row(r["week"], str(r["sessions"]), r["completed"], r["avg_rpe"], str(r["total_min"]), r["focus"])
+        table.add_row(
+            r["week"], r["sessions"], r["completed"], r["avg_rpe"], r["total_min"], r["focus"]
+        )
     console.print(table)
 
 
@@ -131,13 +144,16 @@ def _report_volume(workouts: list[Workout], *, format: str) -> None:
     for t in ("strength", "cardio", "hiit", "mobility"):
         table.add_column(t.capitalize(), justify="right")
     for r in rows:
-        table.add_row(r["week"], *(str(r.get(t, 0)) + " min" for t in ("strength", "cardio", "hiit", "mobility")))
+        table.add_row(
+            str(r["week"]),
+            *(str(r.get(t, 0)) + " min" for t in ("strength", "cardio", "hiit", "mobility")),
+        )
     console.print(table)
 
 
 def _report_rpe(workouts: list[Workout], *, format: str) -> None:
     rows = [
-        {"date": w.date.isoformat(), "type": w.type, "rpe": w.rpe}
+        {"date": w.date.isoformat(), "type": w.type, "rpe": str(w.rpe)}
         for w in workouts
         if w.rpe is not None
     ]
@@ -150,7 +166,7 @@ def _report_rpe(workouts: list[Workout], *, format: str) -> None:
     table.add_column("Type")
     table.add_column("RPE", justify="right")
     for r in rows:
-        table.add_row(r["date"], r["type"], str(r["rpe"]))
+        table.add_row(r["date"], r["type"], r["rpe"])
     console.print(table)
 
 

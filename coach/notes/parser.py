@@ -11,14 +11,16 @@ Section format:
 
 All values are strings in front matter; callers coerce to the right types.
 """
+
 from __future__ import annotations
 
-import re
 from datetime import date
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from coach.models.workout import Workout, WorkoutSource, WorkoutStatus, WorkoutType
 
+if TYPE_CHECKING:
+    from coach.models.plan import WeeklyPlan
 
 # ── Parsing ───────────────────────────────────────────────────────────────────
 
@@ -34,7 +36,7 @@ def parse_front_matter(content: str) -> dict[str, Any]:
         return {}
 
     fm: dict[str, Any] = {}
-    for i, line in enumerate(lines[1:], start=1):
+    for _i, line in enumerate(lines[1:], start=1):
         if line.strip() == "---":
             break
         if ":" in line:
@@ -100,10 +102,18 @@ def render_workout_note(workout: Workout) -> str:
         "---",
     ]
     planned = workout.planned_content or "<!-- Fill in after the workout. -->"
-    completed = workout.completed_content or "<!-- Fill in after the workout. Free text or match the planned format. -->"
-    how_it_went = workout.how_it_went or "<!-- Free text. The assessor will parse this for RPE, PRs, notes. -->"
+    completed = (
+        workout.completed_content
+        or "<!-- Fill in after the workout. Free text or match the planned format. -->"
+    )
+    how_it_went = (
+        workout.how_it_went
+        or "<!-- Free text. The assessor will parse this for RPE, PRs, notes. -->"
+    )
 
-    return "\n".join(fm_lines) + f"""
+    return (
+        "\n".join(fm_lines)
+        + f"""
 
 ## Planned
 
@@ -117,13 +127,11 @@ def render_workout_note(workout: Workout) -> str:
 
 {how_it_went}
 """.rstrip()
+    )
 
 
-def render_plan_note(plan: object) -> str:  # type: ignore[override]
+def render_plan_note(plan: WeeklyPlan) -> str:
     """Render a WeeklyPlan dataclass to note plaintext."""
-    from coach.models.plan import WeeklyPlan
-
-    assert isinstance(plan, WeeklyPlan)
 
     fm_lines = [
         "---",
@@ -137,23 +145,36 @@ def render_plan_note(plan: object) -> str:  # type: ignore[override]
         "---",
     ]
 
-    rows = ["## Schedule", "", "| Day | Workout | Source | Duration |", "|-----|---------|--------|----------|"]
+    rows = [
+        "## Schedule",
+        "",
+        "| Day | Workout | Source | Duration |",
+        "|-----|---------|--------|----------|",
+    ]
     for w in plan.workouts:
         day = w.date.strftime("%a") if hasattr(w, "date") and w.date else "—"
         title = w.note_title or f"{w.type.capitalize()} session"
         source = w.source if hasattr(w, "source") else "—"
-        dur = f"{w.duration_planned} min" if hasattr(w, "duration_planned") and w.duration_planned else "—"
+        dur = (
+            f"{w.duration_planned} min"
+            if hasattr(w, "duration_planned") and w.duration_planned
+            else "—"
+        )
         rows.append(f"| {day} | {title} | {source} | {dur} |")
 
-    gen_notes = plan.generation_notes or "<!-- Rationale written by the planner at generation time -->"
-    rows.extend([
-        "",
-        "## Generation Notes",
-        gen_notes,
-        "",
-        "## Weekly Assessment",
-        "<!-- Written by coach assess at end of week -->",
-    ])
+    gen_notes = (
+        plan.generation_notes or "<!-- Rationale written by the planner at generation time -->"
+    )
+    rows.extend(
+        [
+            "",
+            "## Generation Notes",
+            gen_notes,
+            "",
+            "## Weekly Assessment",
+            "<!-- Written by coach assess at end of week -->",
+        ]
+    )
 
     return "\n".join(fm_lines) + "\n\n" + "\n".join(rows)
 

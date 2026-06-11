@@ -33,8 +33,13 @@ class AnthropicProvider(InferenceProvider):
         except sdk.APIError as e:
             raise InferenceError(f"Inference error: Anthropic API error — {e}") from e
 
+        from anthropic.types import TextBlock
+
+        text_blocks = [b for b in message.content if isinstance(b, TextBlock)]
+        if not text_blocks:
+            raise InferenceError("Anthropic returned no text content")
         return InferenceResponse(
-            text=message.content[0].text,
+            text=text_blocks[0].text,
             provider="anthropic",
             model=self.config.llm.anthropic.model,
         )

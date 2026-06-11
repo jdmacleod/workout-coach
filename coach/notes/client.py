@@ -1,11 +1,11 @@
 """Apple Notes bridge via osascript subprocess calls."""
+
 from __future__ import annotations
 
 import re
 import subprocess
 
 from coach.notes.exceptions import (
-    FolderNotFoundError,
     NoteNotFoundError,
     NotesClientError,
     NotesTimeoutError,
@@ -21,7 +21,9 @@ def _strip_html(html: str) -> str:
     """Strip HTML tags from Notes body content."""
     text = re.sub(r"<br\s*/?>", "\n", html, flags=re.IGNORECASE)
     text = re.sub(r"<[^>]+>", "", text)
-    text = text.replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+    text = (
+        text.replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+    )
     return text.strip()
 
 

@@ -1,20 +1,20 @@
 """coach plan — generate a weekly workout plan."""
+
 from __future__ import annotations
 
 import datetime
 import json
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from coach.config import (
-    ConfigNotFoundError,
-    DATA_DIR,
     EXAMPLES_DIR,
-    PROJECT_ROOT,
+    Config,
+    ConfigNotFoundError,
     load_config,
     resolve_data_path,
 )
@@ -25,7 +25,7 @@ from coach.intelligence.prompts import (
     PLAN_GENERATION_USER,
     PLAN_SCHEMA,
 )
-from coach.intelligence.provider import InferenceRequest, get_provider
+from coach.intelligence.provider import InferenceProvider, InferenceRequest, get_provider
 from coach.models.plan import WeeklyPlan
 from coach.models.workout import Workout
 from coach.notes.client import NotesClient
@@ -44,15 +44,28 @@ err_console = Console(stderr=True, style="bold red")
 
 
 def run(
-    week: Annotated[Optional[str], typer.Option("--week", help="Target week in YYYY-Www format")] = None,
-    focus: Annotated[Optional[str], typer.Option("--focus", help="Override training focus: strength|cardio|deload|recovery")] = None,
-    dry_run: Annotated[bool, typer.Option("--dry-run", help="Print plan without writing to Notes or disk")] = False,
-    overwrite: Annotated[bool, typer.Option("--overwrite", help="Replace existing plan for the target week")] = False,
-    no_calendar: Annotated[bool, typer.Option("--no-calendar", help="Skip calendar source queries")] = False,
+    week: Annotated[
+        str | None, typer.Option("--week", help="Target week in YYYY-Www format")
+    ] = None,
+    focus: Annotated[
+        str | None,
+        typer.Option("--focus", help="Override training focus: strength|cardio|deload|recovery"),
+    ] = None,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Print plan without writing to Notes or disk")
+    ] = False,
+    overwrite: Annotated[
+        bool, typer.Option("--overwrite", help="Replace existing plan for the target week")
+    ] = False,
+    no_calendar: Annotated[
+        bool, typer.Option("--no-calendar", help="Skip calendar source queries")
+    ] = False,
 ) -> None:
     """Generate a weekly workout plan."""
     try:
-        _run_plan(week=week, focus=focus, dry_run=dry_run, overwrite=overwrite, no_calendar=no_calendar)
+        _run_plan(
+            week=week, focus=focus, dry_run=dry_run, overwrite=overwrite, no_calendar=no_calendar
+        )
     except ConfigNotFoundError:
         err_console.print("No config found. Run 'coach setup' first.")
         raise typer.Exit(code=1)
@@ -87,14 +100,11 @@ def _week_to_monday(week_str: str) -> datetime.date:
     return week_start
 
 
-def _load_next_week_notes(cfg: object, week: str, notes_client: NotesClient) -> str:  # type: ignore[type-arg]
+def _load_next_week_notes(cfg: Config, week: str, notes_client: NotesClient) -> str:
     """Read the ## Next Week Notes section from the prior week's assessment."""
-    from coach.config import Config
-    from coach.notes.parser import parse_sections
     from coach.notes.exceptions import NoteNotFoundError
+    from coach.notes.parser import parse_sections
     from coach.notes.schema import FOLDER_ASSESSMENTS
-
-    assert isinstance(cfg, Config)
 
     # Determine prior week
     monday = _week_to_monday(week)
@@ -118,6 +128,7 @@ def _load_next_week_notes(cfg: object, week: str, notes_client: NotesClient) -> 
     local_path = assessments_dir / f"{prior_week}.md"
     if local_path.exists():
         from coach.notes.parser import parse_sections as ps
+
         sections = ps(local_path.read_text())
         notes_text = sections.get("Next Week Notes", "").strip()
         if notes_text:
@@ -126,12 +137,10 @@ def _load_next_week_notes(cfg: object, week: str, notes_client: NotesClient) -> 
     return "(none yet — first week)"
 
 
-def _load_history_summary(cfg: object, weeks: int = 4) -> str:  # type: ignore[type-arg]
+def _load_history_summary(cfg: Config, weeks: int = 4) -> str:
     """Glob last N weeks of workout files and produce a text summary."""
-    from coach.config import Config
     from coach.notes.parser import workout_from_note
 
-    assert isinstance(cfg, Config)
     workouts_dir = resolve_data_path(cfg, "workouts_dir")
     if not workouts_dir.exists():
         return "(no history yet)"
@@ -153,8 +162,14 @@ def _load_history_summary(cfg: object, weeks: int = 4) -> str:  # type: ignore[t
     lines = []
     for w in workouts:
         rpe_str = f" RPE {w.rpe}" if w.rpe else ""
-        dur_str = f" {w.duration_actual}min" if w.duration_actual else (f" {w.duration_planned}min (planned)" if w.duration_planned else "")
-        lines.append(f"- {w.date.isoformat()} {w.type}/{w.subtype or '-'} [{w.status}]{rpe_str}{dur_str}")
+        dur_str = (
+            f" {w.duration_actual}min"
+            if w.duration_actual
+            else (f" {w.duration_planned}min (planned)" if w.duration_planned else "")
+        )
+        lines.append(
+            f"- {w.date.isoformat()} {w.type}/{w.subtype or '-'} [{w.status}]{rpe_str}{dur_str}"
+        )
 
     return "\n".join(lines)
 
@@ -167,12 +182,10 @@ def _run_plan(
     overwrite: bool,
     no_calendar: bool,
     notes_client: NotesClient | None = None,
-    inference_provider: object = None,  # type: ignore[type-arg]
+    inference_provider: InferenceProvider | None = None,
 ) -> None:
     """Core logic for coach plan, injectable for testing."""
-    from coach.config import Config
     cfg = load_config()
-    assert isinstance(cfg, Config)
 
     target_week = _resolve_target_week(week)
     console.print(f"Generating plan for [bold]{target_week}[/bold]...")
@@ -197,6 +210,7 @@ def _run_plan(
     training_info_path = resolve_data_path(cfg, "training_info")
     if not training_info_path.exists():
         import shutil
+
         shutil.copy(EXAMPLES_DIR / "training-info.md", training_info_path)
         console.print(
             f"Copied example training-info.md to {training_info_path}. "
@@ -227,7 +241,9 @@ def _run_plan(
         next_week_notes=next_week_notes,
         training_info=training_info,
         history_summary=history_summary,
-        external_sessions="(none — calendar integration disabled)" if no_calendar or not cfg.calendar.enabled else "(loading...)",
+        external_sessions="(none — calendar integration disabled)"
+        if no_calendar or not cfg.calendar.enabled
+        else "(loading...)",
         available_days=available_days,
         plan_schema=PLAN_SCHEMA,
     )
@@ -236,16 +252,15 @@ def _run_plan(
         user_prompt += f"\n\nOverride training focus: {focus}"
 
     # Call inference (with one retry on parse error)
-    from coach.intelligence.provider import InferenceProvider
-    assert isinstance(provider, InferenceProvider)
-
     raw_response = _infer_with_retry(provider, PLAN_GENERATION_SYSTEM, user_prompt, PLAN_SCHEMA)
 
     # Parse JSON response
     try:
         plan_data = json.loads(raw_response)
     except json.JSONDecodeError as e:
-        raise InferenceParseError(f"Failed to parse plan JSON: {e}\nResponse: {raw_response[:200]}") from e
+        raise InferenceParseError(
+            f"Failed to parse plan JSON: {e}\nResponse: {raw_response[:200]}"
+        ) from e
 
     # Build plan objects
     workouts: list[Workout] = []
@@ -267,7 +282,7 @@ def _run_plan(
         w = Workout(
             id=f"wrk-{session_date.isoformat().replace('-', '')}-{slug[:8]}",
             date=session_date,
-            type=wtype,  # type: ignore[arg-type]
+            type=wtype,
             status="planned",
             source="generated",
             subtype=session.get("subtype"),
@@ -296,12 +311,18 @@ def _run_plan(
     workouts_dir.mkdir(parents=True, exist_ok=True)
 
     for w in workouts:
-        slug = (w.note_title or "session").lower().replace(" ", "-").replace("—", "").replace("  ", "-")
+        slug = (
+            (w.note_title or "session")
+            .lower()
+            .replace(" ", "-")
+            .replace("—", "")
+            .replace("  ", "-")
+        )
         filename = f"{w.date.isoformat()}-{slug[:40]}.md"
         (workouts_dir / filename).write_text(render_workout_note(w))
 
     local_plan_path.write_text(render_plan_note(plan))
-    console.print(f"[green]Local files written.[/green]")
+    console.print("[green]Local files written.[/green]")
 
     # Write to Apple Notes (after all local files succeed)
     for w in workouts:
@@ -310,16 +331,13 @@ def _run_plan(
 
     plan_title = plan_note_title(target_week)
     client.create_note(FOLDER_PLANS, plan_title, render_plan_note(plan))
-    console.print(f"[green]Apple Notes updated.[/green]")
+    console.print("[green]Apple Notes updated.[/green]")
 
     _print_plan_table(plan)
 
 
-def _infer_with_retry(provider: object, system: str, user: str, schema: str) -> str:  # type: ignore[type-arg]
+def _infer_with_retry(provider: InferenceProvider, system: str, user: str, schema: str) -> str:
     """Call inference with one retry on parse failure."""
-    from coach.intelligence.provider import InferenceProvider
-
-    assert isinstance(provider, InferenceProvider)
     req = InferenceRequest(system=system, user=user, max_tokens=2048)
     resp = provider.infer(req)
 
@@ -336,12 +354,10 @@ def _infer_with_retry(provider: object, system: str, user: str, schema: str) -> 
     return retry_resp.text
 
 
-def _push_plan_to_notes(cfg: object, plan_path: Path, week: str, notes_client: NotesClient | None) -> None:  # type: ignore[type-arg]
+def _push_plan_to_notes(
+    cfg: Config, plan_path: Path, week: str, notes_client: NotesClient | None
+) -> None:
     """Re-push an existing local plan file to Apple Notes."""
-    from coach.config import Config
-    from coach.notes.parser import parse_sections, parse_front_matter
-
-    assert isinstance(cfg, Config)
     client = notes_client or NotesClient(account=cfg.notes.account, root_folder=cfg.notes.folder)
     content = plan_path.read_text()
     plan_title = plan_note_title(week)
@@ -353,13 +369,14 @@ def _push_plan_to_notes(cfg: object, plan_path: Path, week: str, notes_client: N
 
 def _print_plan_table(plan: WeeklyPlan) -> None:
     """Print a summary table of the plan."""
-    table = Table(title=f"Plan for {plan.week} — {plan.training_focus.capitalize()}", show_header=True)
+    table = Table(
+        title=f"Plan for {plan.week} — {plan.training_focus.capitalize()}", show_header=True
+    )
     table.add_column("Day")
     table.add_column("Workout")
     table.add_column("Duration")
     table.add_column("Type")
 
-    day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     for w in plan.workouts:
         day = w.date.strftime("%a") if w.date else "—"
         title = w.note_title or f"{w.type}"

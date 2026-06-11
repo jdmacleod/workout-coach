@@ -1,15 +1,16 @@
 """coach assess — parse completed workout notes and generate weekly assessment."""
+
 from __future__ import annotations
 
 import datetime
 import json
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, Any, cast
 
 import typer
 from rich.console import Console
 
-from coach.config import ConfigNotFoundError, load_config, resolve_data_path
+from coach.config import Config, ConfigNotFoundError, load_config, resolve_data_path
 from coach.intelligence.exceptions import InferenceError, InferenceParseError
 from coach.intelligence.prompts import (
     ASSESS_SCHEMA,
@@ -21,11 +22,11 @@ from coach.intelligence.prompts import (
     WEEKLY_SUMMARY_SYSTEM,
     WEEKLY_SUMMARY_USER,
 )
-from coach.intelligence.provider import InferenceRequest, get_provider
+from coach.intelligence.provider import InferenceProvider, InferenceRequest, get_provider
 from coach.models.workout import Workout
 from coach.notes.client import NotesClient
 from coach.notes.exceptions import NoteNotFoundError, NotesClientError
-from coach.notes.parser import parse_sections, render_workout_note, workout_from_note
+from coach.notes.parser import render_workout_note, workout_from_note
 from coach.notes.schema import (
     FOLDER_ASSESSMENTS,
     FOLDER_WORKOUTS,
@@ -37,9 +38,15 @@ err_console = Console(stderr=True, style="bold red")
 
 
 def run(
-    workout: Annotated[Optional[str], typer.Option("--workout", help="Assess a single note by title")] = None,
-    week: Annotated[Optional[str], typer.Option("--week", help="Target week in YYYY-Www format (default: current)")] = None,
-    dry_run: Annotated[bool, typer.Option("--dry-run", help="Print extracted data without writing")] = False,
+    workout: Annotated[
+        str | None, typer.Option("--workout", help="Assess a single note by title")
+    ] = None,
+    week: Annotated[
+        str | None, typer.Option("--week", help="Target week in YYYY-Www format (default: current)")
+    ] = None,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Print extracted data without writing")
+    ] = False,
 ) -> None:
     """Parse completed workout notes, extract metrics, and generate weekly assessment."""
     try:
@@ -69,18 +76,13 @@ def _run_assess(
     week: str | None,
     dry_run: bool,
     notes_client: NotesClient | None = None,
-    inference_provider: object = None,  # type: ignore[type-arg]
+    inference_provider: InferenceProvider | None = None,
 ) -> None:
     """Core logic for coach assess, injectable for testing."""
-    from coach.config import Config
-    from coach.intelligence.provider import InferenceProvider
-
     cfg = load_config()
-    assert isinstance(cfg, Config)
 
     client = notes_client or NotesClient(account=cfg.notes.account, root_folder=cfg.notes.folder)
     provider = inference_provider or get_provider(cfg)
-    assert isinstance(provider, InferenceProvider)
 
     if workout_title:
         _assess_single(cfg, client, provider, workout_title, dry_run=dry_run)
@@ -90,19 +92,14 @@ def _run_assess(
 
 
 def _assess_single(
-    cfg: object,  # type: ignore[type-arg]
+    cfg: Config,
     client: NotesClient,
-    provider: object,  # type: ignore[type-arg]
+    provider: InferenceProvider,
     title: str,
     *,
     dry_run: bool,
 ) -> None:
     """Assess a single workout note."""
-    from coach.config import Config
-    from coach.intelligence.provider import InferenceProvider
-
-    assert isinstance(cfg, Config)
-    assert isinstance(provider, InferenceProvider)
 
     try:
         content = client.get_note(FOLDER_WORKOUTS, title)
@@ -133,19 +130,14 @@ def _assess_single(
 
 
 def _assess_week(
-    cfg: object,  # type: ignore[type-arg]
+    cfg: Config,
     client: NotesClient,
-    provider: object,  # type: ignore[type-arg]
+    provider: InferenceProvider,
     week: str,
     *,
     dry_run: bool,
 ) -> None:
     """Assess all workouts for a week and write a weekly assessment note."""
-    from coach.config import Config
-    from coach.intelligence.provider import InferenceProvider
-
-    assert isinstance(cfg, Config)
-    assert isinstance(provider, InferenceProvider)
 
     console.print(f"Assessing week [bold]{week}[/bold]...")
 
@@ -158,7 +150,7 @@ def _assess_week(
         return
 
     # Assess each completed workout
-    assessed: list[tuple[Workout, dict]] = []
+    assessed: list[tuple[Workout, dict[str, Any]]] = []
     for w in weekly_workouts:
         if not w.completed_content and not w.how_it_went:
             console.print(f"  [dim]Skipping {w.note_title} — no completion data[/dim]")
@@ -187,15 +179,24 @@ def _assess_week(
 
     # Generate weekly narrative
     session_details = "\n".join(
-        f"- {w.date.isoformat()} {w.type} [{w.status}] RPE={w.rpe or '-'}"
-        for w, _ in assessed
+        f"- {w.date.isoformat()} {w.type} [{w.status}] RPE={w.rpe or '-'}" for w, _ in assessed
     )
 
-    summary = _generate_weekly_summary(provider, week, len(completed), len(weekly_workouts), avg_rpe, total_duration, session_details)
-    next_week_notes = _generate_next_week_notes(provider, week, completion_rate, avg_rpe, total_duration, session_details, summary)
+    summary = _generate_weekly_summary(
+        provider,
+        week,
+        len(completed),
+        len(weekly_workouts),
+        avg_rpe,
+        total_duration,
+        session_details,
+    )
+    next_week_notes = _generate_next_week_notes(
+        provider, week, completion_rate, avg_rpe, total_duration, session_details, summary
+    )
 
     # Build assessment note
-    prs: list[dict] = []
+    prs: list[dict[str, Any]] = []
     for _, result in assessed:
         prs.extend(result.get("prs", []))
 
@@ -229,16 +230,17 @@ def _assess_week(
         client.create_note(FOLDER_ASSESSMENTS, assessment_title, assessment_body)
 
     console.print(f"[green]Assessment written:[/green] {assessment_title}")
-    console.print(f"  Completion: {completion_rate:.0%} | Avg RPE: {avg_rpe:.1f}" if avg_rpe else f"  Completion: {completion_rate:.0%}")
-    console.print(f"\n[bold]Next Week Notes:[/bold]")
+    console.print(
+        f"  Completion: {completion_rate:.0%} | Avg RPE: {avg_rpe:.1f}"
+        if avg_rpe
+        else f"  Completion: {completion_rate:.0%}"
+    )
+    console.print("\n[bold]Next Week Notes:[/bold]")
     console.print(f"  {next_week_notes}")
 
 
-def _extract_metrics(provider: object, workout: Workout) -> dict:  # type: ignore[type-arg]
+def _extract_metrics(provider: InferenceProvider, workout: Workout) -> dict[str, Any]:
     """Call LLM to extract metrics from a workout note. Returns parsed JSON dict."""
-    from coach.intelligence.provider import InferenceProvider
-
-    assert isinstance(provider, InferenceProvider)
 
     metadata = (
         f"type: {workout.type}, subtype: {workout.subtype or '-'}, "
@@ -254,23 +256,25 @@ def _extract_metrics(provider: object, workout: Workout) -> dict:  # type: ignor
     resp = provider.infer(req)
 
     try:
-        return json.loads(resp.text)
+        return cast(dict[str, Any], json.loads(resp.text))
     except json.JSONDecodeError:
         # One retry
-        correction = JSON_PARSE_CORRECTION.format(previous_response=resp.text[:500], schema=ASSESS_SCHEMA)
+        correction = JSON_PARSE_CORRECTION.format(
+            previous_response=resp.text[:500], schema=ASSESS_SCHEMA
+        )
         retry_req = InferenceRequest(system=ASSESS_SYSTEM, user=correction, max_tokens=512)
         retry_resp = provider.infer(retry_req)
         try:
-            return json.loads(retry_resp.text)
+            return cast(dict[str, Any], json.loads(retry_resp.text))
         except json.JSONDecodeError as e:
             raise InferenceParseError(f"Could not parse assessment JSON: {e}") from e
 
 
-def _apply_metrics(workout: Workout, result: dict) -> Workout:
+def _apply_metrics(workout: Workout, result: dict[str, Any]) -> Workout:
     """Return a new Workout with extracted metrics applied."""
     import dataclasses
 
-    updates: dict = {}
+    updates: dict[str, Any] = {}
     if "status" in result:
         updates["status"] = result["status"]
     if result.get("rpe") is not None:
@@ -290,7 +294,13 @@ def _apply_metrics(workout: Workout, result: dict) -> Workout:
 def _write_local_workout(workouts_dir: Path, workout: Workout) -> None:
     """Write updated workout front matter + body to local file."""
     workouts_dir.mkdir(parents=True, exist_ok=True)
-    slug = (workout.note_title or workout.id).lower().replace(" ", "-").replace("—", "").replace("  ", "-")
+    slug = (
+        (workout.note_title or workout.id)
+        .lower()
+        .replace(" ", "-")
+        .replace("—", "")
+        .replace("  ", "-")
+    )
     filename = f"{workout.date.isoformat()}-{slug[:40]}.md"
     path = workouts_dir / filename
     path.write_text(render_workout_note(workout))
@@ -321,7 +331,7 @@ def _load_week_workouts(workouts_dir: Path, week: str) -> list[Workout]:
 
 
 def _generate_weekly_summary(
-    provider: object,  # type: ignore[type-arg]
+    provider: InferenceProvider,
     week: str,
     completed: int,
     planned: int,
@@ -329,9 +339,6 @@ def _generate_weekly_summary(
     total_duration: int,
     session_details: str,
 ) -> str:
-    from coach.intelligence.provider import InferenceProvider
-
-    assert isinstance(provider, InferenceProvider)
 
     user = WEEKLY_SUMMARY_USER.format(
         week=week,
@@ -346,7 +353,7 @@ def _generate_weekly_summary(
 
 
 def _generate_next_week_notes(
-    provider: object,  # type: ignore[type-arg]
+    provider: InferenceProvider,
     week: str,
     completion_rate: float,
     avg_rpe: float | None,
@@ -354,10 +361,6 @@ def _generate_next_week_notes(
     session_details: str,
     observations: str,
 ) -> str:
-    from coach.intelligence.provider import InferenceProvider
-
-    assert isinstance(provider, InferenceProvider)
-
     user = NEXT_WEEK_NOTES_USER.format(
         week=week,
         completion_rate=f"{completion_rate:.0%}",
@@ -379,9 +382,9 @@ def _render_assessment_note(
     completion_rate: float,
     avg_rpe: float | None,
     total_duration_min: int,
-    prs: list[dict],
+    prs: list[dict[str, Any]],
     summary: str,
-    session_log: list[tuple],
+    session_log: list[tuple[Workout, dict[str, Any]]],
     next_week_notes: str,
 ) -> str:
     """Render the full assessment note as plaintext."""
@@ -415,13 +418,15 @@ def _render_assessment_note(
         dur_str = f"{w.duration_actual} min" if w.duration_actual else "—"
         lines.append(f"| {w.date.isoformat()} | {title} | {w.status} | {rpe_str} | {dur_str} |")
 
-    lines.extend([
-        "",
-        "## Observations",
-        "(generated from session data above)",
-        "",
-        "## Next Week Notes",
-        next_week_notes,
-    ])
+    lines.extend(
+        [
+            "",
+            "## Observations",
+            "(generated from session data above)",
+            "",
+            "## Next Week Notes",
+            next_week_notes,
+        ]
+    )
 
     return "\n".join(lines)

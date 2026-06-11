@@ -1,12 +1,9 @@
 """Unit tests for coach log command."""
+
 from __future__ import annotations
 
-import shutil
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
-
-import pytest
 
 from coach.config import Config, DataConfig, NotesConfig
 from coach.notes.schema import FOLDER_WORKOUTS
@@ -29,8 +26,10 @@ def test_log_creates_note_and_local_file(tmp_path):
 
     inputs = iter(["strength", "Upper Body", "50", "Barbell work", "7", "Felt great"])
 
-    with patch("coach.commands.log.load_config", return_value=cfg), \
-         patch("typer.prompt", side_effect=lambda msg, default="": next(inputs)):
+    with (
+        patch("coach.commands.log.load_config", return_value=cfg),
+        patch("typer.prompt", side_effect=lambda msg, default="": next(inputs)),
+    ):
         _run_log(
             date_str="2026-06-09",
             workout_type=None,
@@ -62,8 +61,10 @@ def test_log_with_flags_skips_type_and_title_prompts(tmp_path):
 
     inputs = iter(["45", "", "", ""])  # duration, description, rpe, how_it_went
 
-    with patch("coach.commands.log.load_config", return_value=cfg), \
-         patch("typer.prompt", side_effect=lambda msg, default="": next(inputs)):
+    with (
+        patch("coach.commands.log.load_config", return_value=cfg),
+        patch("typer.prompt", side_effect=lambda msg, default="": next(inputs)),
+    ):
         _run_log(
             date_str="2026-06-10",
             workout_type="cardio",

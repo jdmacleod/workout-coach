@@ -1,4 +1,5 @@
 """Unit tests for pure-Python helpers in coach/notes/client.py"""
+
 from coach.notes.client import _escape_for_applescript, _strip_html
 
 

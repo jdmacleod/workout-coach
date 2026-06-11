@@ -32,11 +32,13 @@ class SwiftInferenceProvider(InferenceProvider):
         return major >= 26 and self._binary_path().exists()
 
     def infer(self, request: InferenceRequest) -> InferenceResponse:
-        payload = json.dumps({
-            "system": request.system,
-            "user": request.user,
-            "max_tokens": request.max_tokens,
-        })
+        payload = json.dumps(
+            {
+                "system": request.system,
+                "user": request.user,
+                "max_tokens": request.max_tokens,
+            }
+        )
         try:
             result = subprocess.run(
                 [str(self._binary_path())],

@@ -38,6 +38,7 @@ class AppleIntelligenceProvider(InferenceProvider):
             )
         except subprocess.TimeoutExpired:
             from coach.intelligence.exceptions import InferenceTimeoutError
+
             raise InferenceTimeoutError("Apple Intelligence shortcut timed out after 120s")
         if result.returncode != 0:
             raise InferenceError(f"Shortcut failed: {result.stderr.decode()}")

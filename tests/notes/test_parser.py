@@ -1,16 +1,14 @@
 """Unit tests for coach/notes/parser.py"""
+
 from datetime import date
 
-import pytest
-
+from coach.models.workout import Workout
 from coach.notes.parser import (
     parse_front_matter,
     parse_sections,
     render_workout_note,
     workout_from_note,
 )
-from coach.models.workout import Workout
-
 
 SAMPLE_WORKOUT_NOTE = """\
 ---

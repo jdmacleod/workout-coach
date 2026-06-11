@@ -1,4 +1,5 @@
 import typer
+
 from coach.commands import assess, log, plan, report, setup, status
 
 app = typer.Typer(name="coach", help="Exercise Coach — Apple Notes fitness CLI")

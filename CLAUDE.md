@@ -1,4 +1,47 @@
 
+## Coding conventions
+
+### Python environment
+
+Use **uv** for all Python environment and dependency management:
+
+```bash
+uv sync                     # install all deps (creates/updates .venv and uv.lock)
+uv add <package>            # add a runtime dependency
+uv add --dev <package>      # add a dev dependency (goes into [dependency-groups] dev)
+uv run <cmd>                # run a command in the managed venv
+```
+
+Dev dependencies live in `[dependency-groups]` (PEP 735), not `[project.optional-dependencies]`.
+
+### Linting and formatting
+
+Use **ruff** for both linting and formatting, and **mypy** for type checking:
+
+```bash
+uv run ruff check coach/ tests/        # lint
+uv run ruff check --fix coach/ tests/  # auto-fix lint issues
+uv run ruff format coach/ tests/       # format
+uv run mypy coach/                     # type check
+```
+
+Ruff rules in effect: E, W, F, I, UP, B, SIM (see `[tool.ruff.lint]` in pyproject.toml for ignores).
+Mypy is configured with `strict = true` and `ignore_missing_imports = true`.
+
+**All three tools must pass clean before committing.** Run them together:
+
+```bash
+uv run ruff check coach/ tests/ && uv run ruff format coach/ tests/ && uv run mypy coach/
+```
+
+### Testing
+
+```bash
+uv run pytest tests/ -m "not integration"  # unit tests (fast, no Apple Notes)
+uv run pytest tests/ -m integration        # integration tests (requires Notes.app)
+uv run pytest tests/                       # all tests
+```
+
 ## Skill routing
 
 When the user's request matches an available skill, invoke it via the Skill tool. When in doubt, invoke the skill.

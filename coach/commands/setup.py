@@ -1,9 +1,9 @@
 """coach setup — first-time initialization."""
+
 from __future__ import annotations
 
 import platform
 import shutil
-from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -31,8 +31,12 @@ app = typer.Typer(invoke_without_command=True, help="First-time initialization a
 
 @app.callback()
 def run(
-    non_interactive: Annotated[bool, typer.Option("--non-interactive", help="Skip questionnaire; use config.toml as-is")] = False,
-    reset: Annotated[bool, typer.Option("--reset", help="Re-run setup even if already configured")] = False,
+    non_interactive: Annotated[
+        bool, typer.Option("--non-interactive", help="Skip questionnaire; use config.toml as-is")
+    ] = False,
+    reset: Annotated[
+        bool, typer.Option("--reset", help="Re-run setup even if already configured")
+    ] = False,
 ) -> None:
     """First-time initialization. Creates config, data directories, and Notes folder structure."""
     try:
@@ -106,7 +110,8 @@ def _write_config_values(*, name: str, days: str, goal: str, injuries: str) -> N
 
     def _set(text: str, key: str, value: str) -> str:
         import re
-        pattern = rf'^({re.escape(key)}\s*=\s*).*$'
+
+        pattern = rf"^({re.escape(key)}\s*=\s*).*$"
         replacement = rf'\g<1>"{value}"'
         new_text = re.sub(pattern, replacement, text, flags=re.MULTILINE)
         return new_text
@@ -117,9 +122,10 @@ def _write_config_values(*, name: str, days: str, goal: str, injuries: str) -> N
 
     # fitness_days_per_week is an integer, no quotes
     import re
+
     text = re.sub(
-        r'^(fitness_days_per_week\s*=\s*).*$',
-        rf'\g<1>{days}',
+        r"^(fitness_days_per_week\s*=\s*).*$",
+        rf"\g<1>{days}",
         text,
         flags=re.MULTILINE,
     )
@@ -131,10 +137,10 @@ def _show_provider_table() -> None:
     ver_str = platform.mac_ver()[0]
     macos_major = 0
     if ver_str:
-        try:
+        import contextlib
+
+        with contextlib.suppress(ValueError, IndexError):
             macos_major = int(ver_str.split(".")[0])
-        except (ValueError, IndexError):
-            pass
 
     table = Table(title="Inference Provider Availability", show_header=True)
     table.add_column("Provider")
@@ -146,10 +152,13 @@ def _show_provider_table() -> None:
     table.add_row(
         "swift (Foundation Models)",
         "[green]Yes[/green]" if swift_ok else "[red]No[/red]",
-        "macOS 26+ required" if macos_major < 26 else ("binary missing — run swift build" if not swift_binary else "ready"),
+        "macOS 26+ required"
+        if macos_major < 26
+        else ("binary missing — run swift build" if not swift_binary else "ready"),
     )
 
     import os
+
     anthropic_ok = bool(os.environ.get("ANTHROPIC_API_KEY"))
     table.add_row(
         "anthropic",
@@ -173,7 +182,12 @@ def _setup_notes_folders() -> None:
     """Create Apple Notes folder structure."""
     try:
         from coach.notes.client import NotesClient
-        from coach.notes.schema import FOLDER_ASSESSMENTS, FOLDER_PLANS, FOLDER_ROOT, FOLDER_WORKOUTS
+        from coach.notes.schema import (
+            FOLDER_ASSESSMENTS,
+            FOLDER_PLANS,
+            FOLDER_ROOT,
+            FOLDER_WORKOUTS,
+        )
 
         cfg = load_config()
         client = NotesClient(account=cfg.notes.account, root_folder=cfg.notes.folder)

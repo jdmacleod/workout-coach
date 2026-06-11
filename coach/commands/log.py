@@ -1,15 +1,14 @@
 """coach log — quick ad hoc workout entry."""
+
 from __future__ import annotations
 
 import datetime
-from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 from rich.console import Console
 
 from coach.config import ConfigNotFoundError, load_config, resolve_data_path
-from coach.intelligence.exceptions import InferenceError
 from coach.models.workout import Workout
 from coach.notes.client import NotesClient
 from coach.notes.exceptions import NotesClientError
@@ -21,9 +20,11 @@ err_console = Console(stderr=True, style="bold red")
 
 
 def run(
-    date: Annotated[Optional[str], typer.Option("--date", help="Date of workout YYYY-MM-DD (default: today)")] = None,
-    type: Annotated[Optional[str], typer.Option("--type", help="Workout type")] = None,
-    title: Annotated[Optional[str], typer.Option("--title", help="Short title")] = None,
+    date: Annotated[
+        str | None, typer.Option("--date", help="Date of workout YYYY-MM-DD (default: today)")
+    ] = None,
+    type: Annotated[str | None, typer.Option("--type", help="Workout type")] = None,
+    title: Annotated[str | None, typer.Option("--title", help="Short title")] = None,
 ) -> None:
     """Quick interactive entry for ad hoc workouts not in the weekly plan."""
     try:
@@ -116,5 +117,5 @@ def _run_log(
     console.print(f"  Notes: Exercise Coach/Workouts/{note_title}")
     console.print(f"  Local: {local_path}")
     console.print(
-        f"\nTip: run [bold]coach assess --workout \"{note_title}\"[/bold] to extract full metrics."
+        f'\nTip: run [bold]coach assess --workout "{note_title}"[/bold] to extract full metrics.'
     )

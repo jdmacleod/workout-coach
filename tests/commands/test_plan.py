@@ -1,53 +1,52 @@
 """Unit tests for coach plan command."""
+
 from __future__ import annotations
 
-import datetime
 import json
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from coach.config import Config, DataConfig, NotesConfig
-from coach.notes.schema import FOLDER_PLANS, FOLDER_WORKOUTS
+from coach.notes.schema import FOLDER_PLANS
 from tests.intelligence.mock_provider import MockInferenceProvider
 from tests.notes.mock_client import MockNotesClient
 
-
-MOCK_PLAN_RESPONSE = json.dumps({
-    "training_focus": "strength",
-    "weekly_volume": "moderate",
-    "generation_notes": "Balanced week for intermediate lifter.",
-    "sessions": [
-        {
-            "day": "Mon",
-            "type": "strength",
-            "subtype": "upper",
-            "duration_minutes": 55,
-            "title": "Upper Body Push",
-            "planned_content": "Bench 4x5, OHP 3x8",
-            "rationale": "Push focus day",
-        },
-        {
-            "day": "Wed",
-            "type": "cardio",
-            "subtype": "zone2",
-            "duration_minutes": 45,
-            "title": "Zone 2 Run",
-            "planned_content": "Easy 45 min run",
-            "rationale": "Aerobic base",
-        },
-        {
-            "day": "Fri",
-            "type": "rest",
-            "subtype": "",
-            "duration_minutes": 0,
-            "title": "Rest",
-            "planned_content": "",
-            "rationale": "Recovery",
-        },
-    ],
-})
+MOCK_PLAN_RESPONSE = json.dumps(
+    {
+        "training_focus": "strength",
+        "weekly_volume": "moderate",
+        "generation_notes": "Balanced week for intermediate lifter.",
+        "sessions": [
+            {
+                "day": "Mon",
+                "type": "strength",
+                "subtype": "upper",
+                "duration_minutes": 55,
+                "title": "Upper Body Push",
+                "planned_content": "Bench 4x5, OHP 3x8",
+                "rationale": "Push focus day",
+            },
+            {
+                "day": "Wed",
+                "type": "cardio",
+                "subtype": "zone2",
+                "duration_minutes": 45,
+                "title": "Zone 2 Run",
+                "planned_content": "Easy 45 min run",
+                "rationale": "Aerobic base",
+            },
+            {
+                "day": "Fri",
+                "type": "rest",
+                "subtype": "",
+                "duration_minutes": 0,
+                "title": "Rest",
+                "planned_content": "",
+                "rationale": "Recovery",
+            },
+        ],
+    }
+)
 
 
 def _make_config(tmp_dir: str) -> Config:
@@ -73,7 +72,10 @@ def test_plan_dry_run_prints_table_and_writes_nothing(tmp_path, capsys):
 
     # Pre-populate prior assessment with Next Week Notes
     from coach.notes.schema import FOLDER_ASSESSMENTS
-    mock_client.create_note(FOLDER_ASSESSMENTS, "Assessment 2026-W22", "## Next Week Notes\nFocus on recovery.")
+
+    mock_client.create_note(
+        FOLDER_ASSESSMENTS, "Assessment 2026-W22", "## Next Week Notes\nFocus on recovery."
+    )
 
     with patch("coach.commands.plan.load_config", return_value=cfg):
         _run_plan(
@@ -139,6 +141,7 @@ week: 2026-W22
 Focus on recovery this week.
 """
     from coach.notes.schema import FOLDER_ASSESSMENTS
+
     mock_client.create_note(FOLDER_ASSESSMENTS, "Assessment 2026-W22", prior_assessment_body)
 
     provider = MockInferenceProvider(response_text=MOCK_PLAN_RESPONSE)

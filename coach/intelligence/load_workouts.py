@@ -1,4 +1,5 @@
 """Shared helper for loading workout files from disk."""
+
 from __future__ import annotations
 
 import datetime
@@ -27,6 +28,7 @@ def load_workouts(workouts_dir: Path, weeks: int = 8) -> list[Workout]:
                 workouts.append(w)
         except Exception as exc:
             import sys
+
             print(f"Warning: skipping {path.name} — {exc}", file=sys.stderr)
             continue
 
