@@ -161,3 +161,48 @@ Focus on recovery this week.
     assert len(provider.calls) >= 1
     prompt_text = provider.calls[0].user
     assert "Focus on recovery this week." in prompt_text
+
+
+def test_plan_first_time_use_no_prior_assessment(tmp_path):
+    """coach plan succeeds on first run with no prior assessment or history."""
+    from coach.commands.plan import _run_plan
+
+    cfg = _make_config(str(tmp_path))
+    (tmp_path / "training-info.md").write_text("# Training Info\nGeneral fitness.")
+    # Empty Notes store — no folders, no assessments, no history
+    mock_client = MockNotesClient()
+    provider = MockInferenceProvider(response_text=MOCK_PLAN_RESPONSE)
+
+    with patch("coach.commands.plan.load_config", return_value=cfg):
+        _run_plan(
+            week="2026-W23",
+            focus=None,
+            dry_run=False,
+            overwrite=False,
+            no_calendar=True,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    # Plan was written to local disk
+    assert (tmp_path / "plans" / "2026-W23.md").exists()
+    # Plan note was written to Notes despite no prior state
+    notes = mock_client.list_notes(FOLDER_PLANS)
+    assert any("W23" in n for n in notes)
+
+    # LLM received the first-week placeholder, not an error
+    prompt_text = provider.calls[0].user
+    assert "none yet" in prompt_text.lower() or "first week" in prompt_text.lower()
+
+
+def test_plan_first_time_use_injects_first_week_placeholder(tmp_path):
+    """On first use, the planning prompt receives '(none yet — first week)'."""
+    from coach.commands.plan import _load_next_week_notes
+
+    cfg = _make_config(str(tmp_path))
+    mock_client = MockNotesClient()  # empty — no assessments
+
+    with patch("coach.commands.plan.load_config", return_value=cfg):
+        result = _load_next_week_notes(cfg, "2026-W23", mock_client)
+
+    assert result == "(none yet — first week)"

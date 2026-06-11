@@ -224,6 +224,7 @@ def _assess_week(
     (assessments_dir / f"{week}.md").write_text(assessment_body)
 
     assessment_title = assessment_note_title(week)
+    client.ensure_folder(FOLDER_ASSESSMENTS)
     if client.note_exists(FOLDER_ASSESSMENTS, assessment_title):
         client.update_note(FOLDER_ASSESSMENTS, assessment_title, assessment_body)
     else:

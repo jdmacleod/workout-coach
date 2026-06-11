@@ -104,6 +104,7 @@ def _run_log(
 
     # Write to Apple Notes
     client = notes_client or NotesClient(account=cfg.notes.account, root_folder=cfg.notes.folder)
+    client.ensure_folder(FOLDER_WORKOUTS)
     client.create_note(FOLDER_WORKOUTS, note_title, body)
 
     # Write local file

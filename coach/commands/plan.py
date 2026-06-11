@@ -102,7 +102,7 @@ def _week_to_monday(week_str: str) -> datetime.date:
 
 def _load_next_week_notes(cfg: Config, week: str, notes_client: NotesClient) -> str:
     """Read the ## Next Week Notes section from the prior week's assessment."""
-    from coach.notes.exceptions import NoteNotFoundError
+    from coach.notes.exceptions import NotesClientError
     from coach.notes.parser import parse_sections
     from coach.notes.schema import FOLDER_ASSESSMENTS
 
@@ -112,7 +112,8 @@ def _load_next_week_notes(cfg: Config, week: str, notes_client: NotesClient) -> 
     iso = prior_monday.isocalendar()
     prior_week = f"{iso.year}-W{iso.week:02d}"
 
-    # Try Apple Notes first (authoritative)
+    # Try Apple Notes first (authoritative). Catch any Notes error — reading
+    # prior-week data is optional; write failures still surface normally.
     assessment_title = assessment_note_title(prior_week)
     try:
         content = notes_client.get_note(FOLDER_ASSESSMENTS, assessment_title)
@@ -120,7 +121,7 @@ def _load_next_week_notes(cfg: Config, week: str, notes_client: NotesClient) -> 
         notes_text = sections.get("Next Week Notes", "").strip()
         if notes_text:
             return notes_text
-    except NoteNotFoundError:
+    except NotesClientError:
         pass
 
     # Fallback: local assessment file
@@ -324,6 +325,10 @@ def _run_plan(
     local_plan_path.write_text(render_plan_note(plan))
     console.print("[green]Local files written.[/green]")
 
+    # Ensure Notes folders exist (idempotent; handles first-time-use without setup)
+    client.ensure_folder(FOLDER_PLANS)
+    client.ensure_folder(FOLDER_WORKOUTS)
+
     # Write to Apple Notes (after all local files succeed)
     for w in workouts:
         if w.note_title and w.type != "rest":
@@ -361,6 +366,7 @@ def _push_plan_to_notes(
     client = notes_client or NotesClient(account=cfg.notes.account, root_folder=cfg.notes.folder)
     content = plan_path.read_text()
     plan_title = plan_note_title(week)
+    client.ensure_folder(FOLDER_PLANS)
     if client.note_exists(FOLDER_PLANS, plan_title):
         client.update_note(FOLDER_PLANS, plan_title, content)
     else:

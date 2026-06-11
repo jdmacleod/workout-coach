@@ -27,6 +27,47 @@ def _strip_html(html: str) -> str:
     return text.strip()
 
 
+def _folder_script_lines(folder_path: str, account_esc: str) -> list[str]:
+    """Return AppleScript lines that walk a slash-separated path, setting `targetFolder`.
+
+    For "Exercise Coach/Assessments" this produces:
+        set acct to account "iCloud"
+        set targetFolder to folder "Exercise Coach" of acct
+        set targetFolder to folder "Assessments" of targetFolder
+    """
+    parts = [p for p in folder_path.split("/") if p]
+    first_esc = _escape_for_applescript(parts[0])
+    lines = [
+        f'    set acct to account "{account_esc}"',
+        f'    set targetFolder to folder "{first_esc}" of acct',
+    ]
+    for part in parts[1:]:
+        part_esc = _escape_for_applescript(part)
+        lines.append(f'    set targetFolder to folder "{part_esc}" of targetFolder')
+    return lines
+
+
+def _is_not_found_error(exc: Exception) -> bool:
+    """Return True for any AppleScript error that means a folder or note was not found.
+
+    Notes.app returns error -1728 (Can't get object) for all missing-item lookups,
+    but the human-readable prefix varies by macOS version:
+      - "Can't get folder ..."      (macOS 14/15)
+      - "Can't find item ..."       (macOS 16+)
+      - "doesn't exist"
+      - "was not found"
+    Matching on the numeric code (-1728) catches all variants regardless of phrasing.
+    """
+    msg = str(exc)
+    return (
+        "Can't get" in msg
+        or "doesn't exist" in msg
+        or "Can't find" in msg
+        or "was not found" in msg
+        or "(-1728)" in msg
+    )
+
+
 def _run_applescript(script: str) -> str:
     """Execute an AppleScript string via osascript.
 
@@ -95,12 +136,11 @@ class NotesClient:
     def create_note(self, folder: str, title: str, body: str) -> None:
         """Create a new note in the given folder."""
         account_esc = _escape_for_applescript(self._account)
-        folder_esc = _escape_for_applescript(folder)
         title_esc = _escape_for_applescript(title)
         body_esc = _escape_for_applescript(body)
-        script = f"""
-tell application "Notes"
-    set targetFolder to folder "{folder_esc}" of account "{account_esc}"
+        setup = "\n".join(_folder_script_lines(folder, account_esc))
+        script = f"""tell application "Notes"
+{setup}
     make new note at targetFolder with properties {{name:"{title_esc}", body:"{body_esc}"}}
 end tell
 """
@@ -109,19 +149,18 @@ end tell
     def get_note(self, folder: str, title: str) -> str:
         """Return the plaintext body of a note. Raises NoteNotFoundError if absent."""
         account_esc = _escape_for_applescript(self._account)
-        folder_esc = _escape_for_applescript(folder)
         title_esc = _escape_for_applescript(title)
-        script = f"""
-tell application "Notes"
-    set theNote to first note of folder "{folder_esc}" of account "{account_esc}" ¬
-        whose name is "{title_esc}"
+        setup = "\n".join(_folder_script_lines(folder, account_esc))
+        script = f"""tell application "Notes"
+{setup}
+    set theNote to first note of targetFolder whose name is "{title_esc}"
     return body of theNote
 end tell
 """
         try:
             html = _run_applescript(script)
         except NotesClientError as e:
-            if "Can't get" in str(e) or "doesn't exist" in str(e):
+            if _is_not_found_error(e):
                 raise NoteNotFoundError(title) from e
             raise
         return _strip_html(html)
@@ -129,67 +168,74 @@ end tell
     def update_note(self, folder: str, title: str, body: str) -> None:
         """Replace the entire body of an existing note."""
         account_esc = _escape_for_applescript(self._account)
-        folder_esc = _escape_for_applescript(folder)
         title_esc = _escape_for_applescript(title)
         body_esc = _escape_for_applescript(body)
-        script = f"""
-tell application "Notes"
-    set theNote to first note of folder "{folder_esc}" of account "{account_esc}" ¬
-        whose name is "{title_esc}"
+        setup = "\n".join(_folder_script_lines(folder, account_esc))
+        script = f"""tell application "Notes"
+{setup}
+    set theNote to first note of targetFolder whose name is "{title_esc}"
     set body of theNote to "{body_esc}"
 end tell
 """
         try:
             _run_applescript(script)
         except NotesClientError as e:
-            if "Can't get" in str(e) or "doesn't exist" in str(e):
+            if _is_not_found_error(e):
                 raise NoteNotFoundError(title) from e
             raise
 
     def note_exists(self, folder: str, title: str) -> bool:
         """Return True if a note with the given title exists in the folder."""
         account_esc = _escape_for_applescript(self._account)
-        folder_esc = _escape_for_applescript(folder)
         title_esc = _escape_for_applescript(title)
-        script = f"""
-tell application "Notes"
-    set matchCount to count of (notes of folder "{folder_esc}" of account "{account_esc}" ¬
-        whose name is "{title_esc}")
+        setup = "\n".join(_folder_script_lines(folder, account_esc))
+        script = f"""tell application "Notes"
+{setup}
+    set matchCount to count of (notes of targetFolder whose name is "{title_esc}")
     return matchCount > 0
 end tell
 """
-        result = _run_applescript(script)
+        try:
+            result = _run_applescript(script)
+        except NotesClientError as e:
+            if _is_not_found_error(e):
+                return False
+            raise
         return result.lower() == "true"
 
     def list_notes(self, folder: str) -> list[str]:
         """Return a list of note titles in the folder."""
         account_esc = _escape_for_applescript(self._account)
-        folder_esc = _escape_for_applescript(folder)
-        script = f"""
-tell application "Notes"
-    set noteNames to name of every note of folder "{folder_esc}" of account "{account_esc}"
+        setup = "\n".join(_folder_script_lines(folder, account_esc))
+        script = f"""tell application "Notes"
+{setup}
+    set noteNames to name of every note of targetFolder
     return noteNames
 end tell
 """
-        raw = _run_applescript(script)
+        try:
+            raw = _run_applescript(script)
+        except NotesClientError as e:
+            if _is_not_found_error(e):
+                return []
+            raise
         titles = raw.split(", ") if raw else []
         return [t for t in titles if t]
 
     def delete_note(self, folder: str, title: str) -> None:
         """Delete a note by title. Raises NoteNotFoundError if absent."""
         account_esc = _escape_for_applescript(self._account)
-        folder_esc = _escape_for_applescript(folder)
         title_esc = _escape_for_applescript(title)
-        script = f"""
-tell application "Notes"
-    set theNote to first note of folder "{folder_esc}" of account "{account_esc}" ¬
-        whose name is "{title_esc}"
+        setup = "\n".join(_folder_script_lines(folder, account_esc))
+        script = f"""tell application "Notes"
+{setup}
+    set theNote to first note of targetFolder whose name is "{title_esc}"
     delete theNote
 end tell
 """
         try:
             _run_applescript(script)
         except NotesClientError as e:
-            if "Can't get" in str(e) or "doesn't exist" in str(e):
+            if _is_not_found_error(e):
                 raise NoteNotFoundError(title) from e
             raise
