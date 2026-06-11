@@ -107,7 +107,7 @@ provider = "swift"          # swift | apple | ollama | llamacpp | anthropic
 
 | Provider | macOS | Notes |
 |---|---|---|
-| `swift` | 26+ | On-device Foundation Models. Build: `cd swift && swift build -c release` |
+| `swift` | 26+ | On-device Foundation Models. Build: `make -C swift build` |
 | `apple` | 26+ | Apple Intelligence via Shortcuts.app |
 | `ollama` | 13+ | Local LLM server. `brew install ollama && ollama pull llama3.2` |
 | `llamacpp` | 13+ | llama.cpp OpenAI-compatible server |

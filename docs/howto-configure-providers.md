@@ -19,10 +19,11 @@ Uses Apple's on-device Foundation Models framework. Private, fast, and free.
 1. Build the Swift inference binary:
 
    ```bash
-   cd swift && swift build -c release
+   make -C swift build
    ```
 
-   This produces `swift/.build/release/CoachInfer`.
+   This produces `swift/.build/release/CoachInfer`. Run `make -C swift help` to
+   see all available targets (`build`, `debug`, `test`, `clean`, `smoke`).
 
 2. Set `provider = "swift"` in `config/config.toml`:
 
@@ -40,7 +41,12 @@ Uses Apple's on-device Foundation Models framework. Private, fast, and free.
    uv run coach setup --non-interactive
    ```
 
-   The provider table should show Swift as **Yes / ready**.
+   The provider table should show Swift as **Yes / ready**. To run a live
+   end-to-end test against Apple Intelligence:
+
+   ```bash
+   make -C swift smoke
+   ```
 
 ---
 

@@ -54,7 +54,7 @@ binary = "swift/.build/release/CoachInfer"
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `binary` | string | `swift/.build/release/CoachInfer` | Path to the compiled Swift inference binary, relative to the project root. Build with `cd swift && swift build -c release`. |
+| `binary` | string | `swift/.build/release/CoachInfer` | Path to the compiled Swift inference binary, relative to the project root. Build with `make -C swift build`. |
 
 ---
 

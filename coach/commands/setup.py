@@ -154,7 +154,7 @@ def _show_provider_table() -> None:
         "[green]Yes[/green]" if swift_ok else "[red]No[/red]",
         "macOS 26+ required"
         if macos_major < 26
-        else ("binary missing — run swift build" if not swift_binary else "ready"),
+        else ("binary missing — run make -C swift build" if not swift_binary else "ready"),
     )
 
     import os
@@ -173,8 +173,7 @@ def _show_provider_table() -> None:
 
     if macos_major >= 26 and not swift_binary:
         console.print(
-            "\n[bold]Tip:[/bold] Build the Swift inference binary with:\n"
-            "  cd swift && swift build -c release"
+            "\n[bold]Tip:[/bold] Build the Swift inference binary with:\n  make -C swift build"
         )
 
 

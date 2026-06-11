@@ -1,21 +1,6 @@
+import CoachInferCore
 import Foundation
 import FoundationModels
-
-struct Request: Decodable {
-    let system: String
-    let user: String
-    let maxTokens: Int
-
-    enum CodingKeys: String, CodingKey {
-        case system, user
-        case maxTokens = "max_tokens"
-    }
-}
-
-struct Response: Encodable {
-    let text: String
-    let model: String
-}
 
 let inputData = FileHandle.standardInput.readDataToEndOfFile()
 let request = try JSONDecoder().decode(Request.self, from: inputData)
