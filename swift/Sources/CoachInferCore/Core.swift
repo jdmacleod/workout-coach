@@ -25,7 +25,7 @@ public struct Request: Decodable, Sendable {
 // MARK: - Response
 
 /// JSON payload written to stdout.
-public struct Response: Encodable, Sendable {
+public struct Response: Codable, Sendable {
     public let text: String
     public let model: String
 
