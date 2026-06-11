@@ -1,4 +1,16 @@
 FOLDER_ROOT = "Exercise Coach"
+
+
+def safe_slug(text: str) -> str:
+    """Convert text to a filesystem-safe slug with no path separators or leading/trailing hyphens."""
+    slug = text.lower()
+    for ch in (" ", "—", "/", "\\", ":", "*", "?", '"', "<", ">", "|"):
+        slug = slug.replace(ch, "-")
+    while "--" in slug:
+        slug = slug.replace("--", "-")
+    return slug.strip("-")
+
+
 FOLDER_WORKOUTS = "Exercise Coach/Workouts"
 FOLDER_PLANS = "Exercise Coach/Plans"
 FOLDER_ASSESSMENTS = "Exercise Coach/Assessments"

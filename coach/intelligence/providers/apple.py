@@ -14,6 +14,9 @@ class AppleIntelligenceProvider(InferenceProvider):
     def provider_name(self) -> str:
         return "apple"
 
+    def display_name(self) -> str:
+        return "apple / apple-intelligence"
+
     def is_available(self) -> bool:
         try:
             result = subprocess.run(

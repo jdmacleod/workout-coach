@@ -12,6 +12,9 @@ class OllamaProvider(InferenceProvider):
     def provider_name(self) -> str:
         return "ollama"
 
+    def display_name(self) -> str:
+        return f"ollama / {self.config.llm.ollama.model}"
+
     def is_available(self) -> bool:
         try:
             httpx.get(

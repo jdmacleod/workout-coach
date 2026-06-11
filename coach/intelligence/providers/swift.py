@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from coach.config import PROJECT_ROOT
 from coach.intelligence.exceptions import (
@@ -19,6 +20,9 @@ class SwiftInferenceProvider(InferenceProvider):
     def provider_name(self) -> str:
         return "swift"
 
+    def display_name(self) -> str:
+        return "swift / on-device"
+
     def is_available(self) -> bool:
         import platform
 
@@ -32,13 +36,14 @@ class SwiftInferenceProvider(InferenceProvider):
         return major >= 26 and self._binary_path().exists()
 
     def infer(self, request: InferenceRequest) -> InferenceResponse:
-        payload = json.dumps(
-            {
-                "system": request.system,
-                "user": request.user,
-                "max_tokens": request.max_tokens,
-            }
-        )
+        payload_dict: dict[str, Any] = {
+            "system": request.system,
+            "user": request.user,
+            "max_tokens": request.max_tokens,
+        }
+        if request.schema is not None:
+            payload_dict["schema"] = request.schema
+        payload = json.dumps(payload_dict)
         try:
             result = subprocess.run(
                 [str(self._binary_path())],
@@ -54,6 +59,8 @@ class SwiftInferenceProvider(InferenceProvider):
             data = json.loads(result.stdout)
         except json.JSONDecodeError as e:
             raise InferenceParseError(f"coach-infer returned invalid JSON: {e}") from e
+        if data.get("error"):
+            raise InferenceError(f"coach-infer model error: {data['error']}")
         return InferenceResponse(
             text=data["text"],
             provider="swift",

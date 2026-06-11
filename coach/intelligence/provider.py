@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 from coach.config import Config, ConfigError
 from coach.intelligence.exceptions import InferenceError
@@ -13,6 +14,7 @@ class InferenceRequest:
     user: str
     max_tokens: int = 1024
     temperature: float = 0.4
+    schema: dict[str, Any] | None = field(default=None, compare=False)
 
 
 @dataclass
@@ -38,6 +40,11 @@ class InferenceProvider(ABC):
 
     @abstractmethod
     def provider_name(self) -> str: ...
+
+    @abstractmethod
+    def display_name(self) -> str:
+        """Human-readable label shown in console output, e.g. 'anthropic / claude-3-5-sonnet'."""
+        ...
 
 
 def get_provider(config: Config) -> InferenceProvider:

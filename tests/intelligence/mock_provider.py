@@ -26,3 +26,6 @@ class MockInferenceProvider(InferenceProvider):
 
     def provider_name(self) -> str:
         return "mock"
+
+    def display_name(self) -> str:
+        return "mock / mock-model"

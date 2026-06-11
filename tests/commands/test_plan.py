@@ -206,3 +206,136 @@ def test_plan_first_time_use_injects_first_week_placeholder(tmp_path):
         result = _load_next_week_notes(cfg, "2026-W23", mock_client)
 
     assert result == "(none yet — first week)"
+
+
+def test_infer_with_retry_strips_json_code_fence():
+    """_infer_with_retry succeeds when the LLM wraps JSON in markdown code fences."""
+    from coach.commands.plan import _infer_with_retry
+
+    fenced_response = f"```json\n{MOCK_PLAN_RESPONSE}\n```"
+    provider = MockInferenceProvider(response_text=fenced_response)
+    result = _infer_with_retry(provider, "sys", "user", "{}")
+    assert result == MOCK_PLAN_RESPONSE
+
+
+def test_infer_with_retry_strips_bare_code_fence():
+    """_infer_with_retry succeeds when the LLM wraps JSON in bare ``` fences."""
+    from coach.commands.plan import _infer_with_retry
+
+    fenced_response = f"```\n{MOCK_PLAN_RESPONSE}\n```"
+    provider = MockInferenceProvider(response_text=fenced_response)
+    result = _infer_with_retry(provider, "sys", "user", "{}")
+    assert result == MOCK_PLAN_RESPONSE
+
+
+def test_infer_with_retry_raises_on_double_failure():
+    """_infer_with_retry raises InferenceParseError if both attempts return non-JSON."""
+    import pytest
+
+    from coach.commands.plan import _infer_with_retry
+    from coach.intelligence.exceptions import InferenceParseError
+
+    provider = MockInferenceProvider(response_text="This is not JSON at all.")
+    with pytest.raises(InferenceParseError, match="after retry"):
+        _infer_with_retry(provider, "sys", "user", "{}")
+
+
+def test_plan_live_handles_fenced_llm_response(tmp_path):
+    """coach plan succeeds when the LLM wraps its JSON in markdown code fences."""
+    from coach.commands.plan import _run_plan
+
+    cfg = _make_config(str(tmp_path))
+    (tmp_path / "training-info.md").write_text("# Training Info\nGeneral fitness.")
+    mock_client = MockNotesClient()
+    fenced_response = f"```json\n{MOCK_PLAN_RESPONSE}\n```"
+    provider = MockInferenceProvider(response_text=fenced_response)
+
+    with patch("coach.commands.plan.load_config", return_value=cfg):
+        _run_plan(
+            week="2026-W23",
+            focus=None,
+            dry_run=False,
+            overwrite=False,
+            no_calendar=True,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    assert (tmp_path / "plans" / "2026-W23.md").exists()
+    notes = mock_client.list_notes(FOLDER_PLANS)
+    assert any("W23" in n for n in notes)
+
+
+def test_safe_slug_strips_path_separators():
+    """safe_slug removes '/' so LLM-generated titles like 'Mobility / Recovery' don't crash file writes."""
+    from coach.notes.schema import safe_slug
+
+    assert "/" not in safe_slug("Mobility / Recovery")
+    assert safe_slug("Mobility / Recovery") == "mobility-recovery"
+
+
+def test_safe_slug_replaces_em_dash():
+    """safe_slug replaces em dash with hyphen instead of deleting it (avoids double hyphens)."""
+    from coach.notes.schema import safe_slug
+
+    result = safe_slug("Upper Body — Push")
+    assert "--" not in result
+    assert result == "upper-body-push"
+
+
+def test_safe_slug_strips_leading_trailing_hyphens():
+    """safe_slug never produces a slug that starts or ends with a hyphen."""
+    from coach.notes.schema import safe_slug
+
+    result = safe_slug("2026-06-17 Mobility — Mobility / Recovery")
+    assert not result.startswith("-")
+    assert not result.endswith("-")
+
+
+def test_plan_live_writes_file_for_slash_in_title(tmp_path):
+    """coach plan writes workout files when LLM returns a title containing '/' (regression for FileNotFoundError)."""
+    import json
+    from unittest.mock import patch
+
+    from coach.commands.plan import _run_plan
+    from tests.intelligence.mock_provider import MockInferenceProvider
+    from tests.notes.mock_client import MockNotesClient
+
+    slash_plan = json.dumps(
+        {
+            "training_focus": "mobility",
+            "weekly_volume": "low",
+            "generation_notes": "Easy week.",
+            "sessions": [
+                {
+                    "day": "Wed",
+                    "type": "mobility",
+                    "subtype": "recovery",
+                    "duration_minutes": 30,
+                    "title": "Mobility / Recovery",
+                    "planned_content": "Light stretching",
+                    "rationale": "Active recovery",
+                }
+            ],
+        }
+    )
+
+    cfg = _make_config(str(tmp_path))
+    (tmp_path / "training-info.md").write_text("# Training Info\nGeneral fitness.")
+    mock_client = MockNotesClient()
+    provider = MockInferenceProvider(response_text=slash_plan)
+
+    with patch("coach.commands.plan.load_config", return_value=cfg):
+        _run_plan(
+            week="2026-W26",
+            focus=None,
+            dry_run=False,
+            overwrite=False,
+            no_calendar=True,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    written = list((tmp_path / "workouts").glob("*.md"))
+    assert len(written) == 1, f"Expected 1 workout file, got: {written}"
+    assert "/" not in written[0].name, f"Filename contains '/': {written[0].name}"

@@ -1,9 +1,14 @@
-from coach.notes.client import NotesClient
+from coach.notes.client import NotesClient, _strip_html
 from coach.notes.exceptions import NoteNotFoundError
 
 
 class MockNotesClient(NotesClient):
-    """In-memory mock for testing. Stores notes in a dict."""
+    """In-memory mock for testing. Stores notes in a dict.
+
+    get_note applies _strip_html() on return to match the real NotesClient, which
+    always strips the HTML that Apple Notes returns. This means tests can write HTML
+    notes and read back plaintext (with semantic tags converted to Markdown equivalents).
+    """
 
     def __init__(self) -> None:
         self._store: dict[tuple[str, str], str] = {}
@@ -15,7 +20,7 @@ class MockNotesClient(NotesClient):
         key = (folder, title)
         if key not in self._store:
             raise NoteNotFoundError(title)
-        return self._store[key]
+        return _strip_html(self._store[key])
 
     def update_note(self, folder: str, title: str, body: str) -> None:
         self._store[(folder, title)] = body

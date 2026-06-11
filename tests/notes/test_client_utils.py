@@ -41,6 +41,48 @@ def test_strip_html_empty():
     assert _strip_html("") == ""
 
 
+def test_strip_html_h2_becomes_markdown_header():
+    """<h2> is converted to ## so parse_sections() can find it after a round-trip."""
+    result = _strip_html("<h2>Planned</h2>")
+    assert result == "## Planned"
+
+
+def test_strip_html_h1_becomes_markdown_h1():
+    result = _strip_html("<h1>My Note</h1>")
+    assert result == "# My Note"
+
+
+def test_strip_html_li_becomes_dash_item():
+    """<li> items are converted to - prefix so they read as a list."""
+    result = _strip_html("<ul><li>Bench Press 4x5</li><li>OHP 3x8</li></ul>")
+    assert "- Bench Press 4x5" in result
+    assert "- OHP 3x8" in result
+
+
+def test_strip_html_h2_in_workout_note_round_trip():
+    """Simulates the full Apple Notes HTML round-trip: HTML from Notes → parse_sections."""
+    from coach.notes.parser import parse_sections
+
+    html = (
+        "<h1>2026-06-17 Strength — Push</h1>"
+        "<p><b>Type:</b> Strength</p>"
+        "<h2>Planned</h2>"
+        "<ul><li>Bench Press 4x5</li></ul>"
+        "<h2>Completed</h2>"
+        "<p>Done all sets.</p>"
+        "<h2>How It Went</h2>"
+        "<p>Felt strong.</p>"
+    )
+    stripped = _strip_html(html)
+    sections = parse_sections(stripped)
+    assert "Planned" in sections
+    assert "Completed" in sections
+    assert "How It Went" in sections
+    assert "Bench Press" in sections["Planned"]
+    assert sections["Completed"] == "Done all sets."
+    assert sections["How It Went"] == "Felt strong."
+
+
 # ── ensure_folder AppleScript generation ──────────────────────────────────────
 
 

@@ -10,6 +10,7 @@ final class RequestTests: XCTestCase {
         XCTAssertEqual(req.system, "sys")
         XCTAssertEqual(req.user, "usr")
         XCTAssertEqual(req.maxTokens, 512)
+        XCTAssertNil(req.schema)
     }
 
     func testDecodeSnakeCaseKey() throws {
@@ -42,6 +43,57 @@ final class RequestTests: XCTestCase {
         XCTAssertEqual(req.system, "a")
         XCTAssertEqual(req.user, "b")
         XCTAssertEqual(req.maxTokens, 42)
+        XCTAssertNil(req.schema)
+    }
+
+    func testDecodeWithFlatStringSchema() throws {
+        let json = #"""
+        {
+          "system": "sys",
+          "user": "usr",
+          "max_tokens": 256,
+          "schema": {
+            "type": "object",
+            "name": "Root",
+            "properties": [
+              {"name": "title", "schema": {"type": "string"}, "is_optional": false},
+              {"name": "count", "schema": {"type": "integer"}, "is_optional": true}
+            ]
+          }
+        }
+        """#.data(using: .utf8)!
+        let req = try JSONDecoder().decode(Request.self, from: json)
+        let schema = try XCTUnwrap(req.schema)
+        XCTAssertEqual(schema.type, "object")
+        XCTAssertEqual(schema.name, "Root")
+        XCTAssertEqual(schema.properties?.count, 2)
+        XCTAssertEqual(schema.properties?[0].name, "title")
+        XCTAssertEqual(schema.properties?[0].schema.type, "string")
+        XCTAssertFalse(schema.properties?[0].isOptional ?? true)
+        XCTAssertEqual(schema.properties?[1].name, "count")
+        XCTAssertTrue(schema.properties?[1].isOptional ?? false)
+    }
+
+    func testDecodeWithNestedArraySchema() throws {
+        let json = #"""
+        {
+          "system": "s",
+          "user": "u",
+          "max_tokens": 128,
+          "schema": {
+            "type": "array",
+            "items": {"type": "string"},
+            "min": 1,
+            "max": 7
+          }
+        }
+        """#.data(using: .utf8)!
+        let req = try JSONDecoder().decode(Request.self, from: json)
+        let schema = try XCTUnwrap(req.schema)
+        XCTAssertEqual(schema.type, "array")
+        XCTAssertEqual(schema.items?.type, "string")
+        XCTAssertEqual(schema.min, 1)
+        XCTAssertEqual(schema.max, 7)
     }
 }
 
@@ -76,5 +128,28 @@ final class ResponseTests: XCTestCase {
         let resp = Response(text: "ok", model: "apple/on-device")
         XCTAssertEqual(resp.text, "ok")
         XCTAssertEqual(resp.model, "apple/on-device")
+        XCTAssertNil(resp.error)
+    }
+
+    func testEncodeOmitsErrorKeyWhenNil() throws {
+        let resp = Response(text: "ok", model: "apple/on-device")
+        let data = try JSONEncoder().encode(resp)
+        let dict = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        XCTAssertNil(dict["error"], "error key should be absent when nil")
+    }
+
+    func testEncodeIncludesErrorWhenPresent() throws {
+        let resp = Response(text: "", model: "apple/on-device", error: "Model unavailable")
+        let data = try JSONEncoder().encode(resp)
+        let dict = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        XCTAssertEqual(dict["error"] as? String, "Model unavailable")
+        XCTAssertEqual(dict["text"] as? String, "")
+    }
+
+    func testDecodeRoundTripsError() throws {
+        let original = Response(text: "", model: "apple/on-device", error: "Something failed")
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(Response.self, from: data)
+        XCTAssertEqual(decoded.error, "Something failed")
     }
 }

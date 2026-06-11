@@ -18,12 +18,24 @@ def _escape_for_applescript(text: str) -> str:
 
 
 def _strip_html(html: str) -> str:
-    """Strip HTML tags from Notes body content."""
-    text = re.sub(r"<br\s*/?>", "\n", html, flags=re.IGNORECASE)
+    """Strip HTML tags from Notes body content.
+
+    Converts semantic heading/list tags to Markdown-equivalent text before
+    stripping so that parse_sections() and parse_front_matter() can process
+    the result the same way they handle locally-stored plaintext files.
+    Newlines are injected around block elements so lines don't run together.
+    """
+    text = html
+    text = re.sub(r"<h2[^>]*>(.*?)</h2>", r"\n## \1\n", text, flags=re.IGNORECASE | re.DOTALL)
+    text = re.sub(r"<h1[^>]*>(.*?)</h1>", r"\n# \1\n", text, flags=re.IGNORECASE | re.DOTALL)
+    text = re.sub(r"<li[^>]*>(.*?)</li>", r"\n- \1", text, flags=re.IGNORECASE | re.DOTALL)
+    text = re.sub(r"</p>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
     text = re.sub(r"<[^>]+>", "", text)
     text = (
         text.replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
     )
+    text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 
 

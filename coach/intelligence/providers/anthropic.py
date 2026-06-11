@@ -12,6 +12,9 @@ class AnthropicProvider(InferenceProvider):
     def provider_name(self) -> str:
         return "anthropic"
 
+    def display_name(self) -> str:
+        return f"anthropic / {self.config.llm.anthropic.model}"
+
     def is_available(self) -> bool:
         return bool(os.environ.get("ANTHROPIC_API_KEY"))
 

@@ -12,6 +12,9 @@ class LlamaCppProvider(InferenceProvider):
     def provider_name(self) -> str:
         return "llamacpp"
 
+    def display_name(self) -> str:
+        return "llamacpp / local"
+
     def is_available(self) -> bool:
         try:
             httpx.get(

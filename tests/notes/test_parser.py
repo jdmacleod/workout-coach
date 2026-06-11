@@ -6,7 +6,10 @@ from coach.models.workout import Workout
 from coach.notes.parser import (
     parse_front_matter,
     parse_sections,
+    render_assessment_note_html,
+    render_plan_note_html,
     render_workout_note,
+    render_workout_note_html,
     workout_from_note,
 )
 
@@ -101,6 +104,175 @@ def test_workout_from_note_missing_optional_fields():
     assert workout.rpe is None
     assert workout.mood is None
     assert workout.tags == []
+
+
+# ── HTML render functions ─────────────────────────────────────────────────────
+
+
+def test_render_workout_note_html_structure():
+    """render_workout_note_html produces h1 title and h2 section headings."""
+    workout = Workout(
+        id="wrk-20260617-001",
+        date=date(2026, 6, 17),
+        type="strength",
+        status="planned",
+        source="generated",
+        subtype="upper",
+        duration_planned=55,
+        planned_content="Bench Press 4x5\nOHP 3x8",
+        note_title="2026-06-17 Strength — Upper Body Push",
+    )
+    html = render_workout_note_html(workout)
+    assert "<h1>2026-06-17 Strength — Upper Body Push</h1>" in html
+    assert "<h2>Planned</h2>" in html
+    assert "<h2>Completed</h2>" in html
+    assert "<h2>How It Went</h2>" in html
+
+
+def test_render_workout_note_html_multiline_planned_becomes_list():
+    """Multi-line planned_content renders as <ul>/<li> list."""
+    workout = Workout(
+        id="wrk-20260617-001",
+        date=date(2026, 6, 17),
+        type="strength",
+        status="planned",
+        source="generated",
+        planned_content="Bench Press 4x5\nOHP 3x8\nDips 3x12",
+        note_title="2026-06-17 Strength — Push",
+    )
+    html = render_workout_note_html(workout)
+    assert "<ul>" in html
+    assert "<li>Bench Press 4x5</li>" in html
+    assert "<li>OHP 3x8</li>" in html
+
+
+def test_render_workout_note_html_empty_content_shows_placeholder():
+    """No planned_content renders an italic placeholder, not blank."""
+    workout = Workout(
+        id="wrk-20260617-001",
+        date=date(2026, 6, 17),
+        type="mobility",
+        status="planned",
+        source="generated",
+        note_title="2026-06-17 Mobility — Recovery",
+    )
+    html = render_workout_note_html(workout)
+    assert "<i>" in html
+    assert "Fill in" in html
+
+
+def test_render_workout_note_html_escapes_special_chars():
+    """HTML-special chars in workout data are escaped in the output."""
+    workout = Workout(
+        id="wrk-x",
+        date=date(2026, 1, 1),
+        type="strength",
+        status="planned",
+        source="manual",
+        planned_content="a & b < c > d",
+        note_title="Test & Note",
+    )
+    html = render_workout_note_html(workout)
+    assert "&amp;" in html
+    assert "&lt;" in html
+    assert "&gt;" in html
+
+
+def test_render_plan_note_html_structure():
+    """render_plan_note_html produces h1 title and bulleted schedule."""
+    from datetime import date as d
+
+    from coach.models.plan import WeeklyPlan
+
+    sessions = [
+        Workout(
+            id="w1",
+            date=d(2026, 6, 16),
+            type="strength",
+            status="planned",
+            source="generated",
+            duration_planned=55,
+            note_title="2026-06-16 Strength — Upper Body",
+        ),
+        Workout(
+            id="w2",
+            date=d(2026, 6, 18),
+            type="cardio",
+            status="planned",
+            source="generated",
+            duration_planned=45,
+            note_title="2026-06-18 Cardio — Zone 2",
+        ),
+    ]
+    plan = WeeklyPlan(
+        week="2026-W25",
+        generated=d(2026, 6, 10),
+        training_focus="strength",
+        weekly_volume="moderate",
+        workouts=sessions,
+        generation_notes="Balanced week.",
+    )
+    html = render_plan_note_html(plan)
+    assert "<h1>Week 2026-W25 — Strength</h1>" in html
+    assert "<h2>Schedule</h2>" in html
+    assert "<ul>" in html
+    assert "<li>" in html
+    assert "55" in html
+    assert "<h2>Generation Notes</h2>" in html
+    assert "Balanced week." in html
+
+
+def test_render_assessment_note_html_stats_and_sections():
+    """render_assessment_note_html includes completion stats and session log."""
+    workout = Workout(
+        id="w1",
+        date=date(2026, 6, 16),
+        type="strength",
+        status="completed",
+        source="generated",
+        rpe=7.5,
+        duration_actual=55,
+        note_title="2026-06-16 Strength — Upper Body",
+    )
+    html = render_assessment_note_html(
+        week="2026-W25",
+        sessions_planned=3,
+        sessions_completed=2,
+        sessions_skipped=1,
+        completion_rate=0.67,
+        avg_rpe=7.5,
+        total_duration_min=100,
+        prs=[],
+        summary="Solid week.",
+        session_log=[(workout, {})],
+        next_week_notes="Keep it up.",
+    )
+    assert "<h1>Assessment — Week 2026-W25</h1>" in html
+    assert "2/3" in html
+    assert "<h2>Session Log</h2>" in html
+    assert "<li>" in html
+    assert "<h2>Next Week Notes</h2>" in html
+    assert "Keep it up." in html
+
+
+def test_render_assessment_note_html_prs_section():
+    """render_assessment_note_html includes a Personal Records section when prs provided."""
+    html = render_assessment_note_html(
+        week="2026-W25",
+        sessions_planned=1,
+        sessions_completed=1,
+        sessions_skipped=0,
+        completion_rate=1.0,
+        avg_rpe=8.0,
+        total_duration_min=60,
+        prs=[{"exercise": "Squat", "value": "100kg"}],
+        summary="Great week.",
+        session_log=[],
+        next_week_notes="Push harder.",
+    )
+    assert "<h2>Personal Records</h2>" in html
+    assert "Squat" in html
+    assert "100kg" in html
 
 
 def test_render_and_reparse_round_trip():

@@ -14,6 +14,7 @@ from coach.config import Config, ConfigNotFoundError, load_config, resolve_data_
 from coach.intelligence.exceptions import InferenceError, InferenceParseError
 from coach.intelligence.prompts import (
     ASSESS_SCHEMA,
+    ASSESS_SCHEMA_DICT,
     ASSESS_SYSTEM,
     ASSESS_USER,
     JSON_PARSE_CORRECTION,
@@ -21,16 +22,25 @@ from coach.intelligence.prompts import (
     NEXT_WEEK_NOTES_USER,
     WEEKLY_SUMMARY_SYSTEM,
     WEEKLY_SUMMARY_USER,
+    extract_json_text,
 )
 from coach.intelligence.provider import InferenceProvider, InferenceRequest, get_provider
 from coach.models.workout import Workout
 from coach.notes.client import NotesClient
 from coach.notes.exceptions import NoteNotFoundError, NotesClientError
-from coach.notes.parser import render_workout_note, workout_from_note
+from coach.notes.parser import (
+    parse_sections,
+    render_assessment_note,
+    render_assessment_note_html,
+    render_workout_note,
+    render_workout_note_html,
+    workout_from_note,
+)
 from coach.notes.schema import (
     FOLDER_ASSESSMENTS,
     FOLDER_WORKOUTS,
     assessment_note_title,
+    safe_slug,
 )
 
 console = Console()
@@ -83,12 +93,32 @@ def _run_assess(
 
     client = notes_client or NotesClient(account=cfg.notes.account, root_folder=cfg.notes.folder)
     provider = inference_provider or get_provider(cfg)
+    console.print(f"[dim]{provider.display_name()}[/dim]")
 
     if workout_title:
         _assess_single(cfg, client, provider, workout_title, dry_run=dry_run)
     else:
         target_week = week or _current_iso_week()
         _assess_week(cfg, client, provider, target_week, dry_run=dry_run)
+
+
+def _find_local_workout_by_title(workouts_dir: Path, title: str) -> Workout | None:
+    """Find a local workout file whose note_title matches `title`.
+
+    Filters by date prefix from the title (first 10 chars) to avoid a full scan.
+    """
+    date_prefix = title[:10] if len(title) >= 10 else ""
+    if not workouts_dir.exists():
+        return None
+    pattern = f"{date_prefix}*.md" if date_prefix else "*.md"
+    for path in workouts_dir.glob(pattern):
+        try:
+            w = workout_from_note(path.read_text(), path.stem)
+            if w.note_title == title:
+                return w
+        except Exception:
+            continue
+    return None
 
 
 def _assess_single(
@@ -99,7 +129,13 @@ def _assess_single(
     *,
     dry_run: bool,
 ) -> None:
-    """Assess a single workout note."""
+    """Assess a single workout note.
+
+    Section content (Completed, How It Went) is read from Apple Notes so
+    that user edits in Notes are captured. Structured metadata (date, type,
+    status, etc.) is loaded from the local file where YAML front matter lives.
+    """
+    import dataclasses
 
     try:
         content = client.get_note(FOLDER_WORKOUTS, title)
@@ -107,8 +143,21 @@ def _assess_single(
         err_console.print(f"Note not found: {title!r}")
         raise typer.Exit(code=1)
 
-    workout = workout_from_note(content, title)
-    result = _extract_metrics(provider, workout)
+    sections = parse_sections(content)
+
+    workouts_dir = resolve_data_path(cfg, "workouts_dir")
+    local_workout = _find_local_workout_by_title(workouts_dir, title)
+    if local_workout is None:
+        workout = workout_from_note(content, title)
+    else:
+        workout = dataclasses.replace(
+            local_workout,
+            completed_content=sections.get("Completed") or local_workout.completed_content,
+            how_it_went=sections.get("How It Went") or local_workout.how_it_went,
+        )
+
+    with console.status(f"Extracting metrics: {title}...", spinner="dots"):
+        result = _extract_metrics(provider, workout)
 
     if dry_run:
         console.print(f"[bold]{title}[/bold]")
@@ -120,12 +169,10 @@ def _assess_single(
 
     # Update workout fields
     updated = _apply_metrics(workout, result)
-    new_body = render_workout_note(updated)
 
     # Write ordering: local first, then Notes
-    workouts_dir = resolve_data_path(cfg, "workouts_dir")
     _write_local_workout(workouts_dir, updated)
-    client.update_note(FOLDER_WORKOUTS, title, new_body)
+    client.update_note(FOLDER_WORKOUTS, title, render_workout_note_html(updated))
     console.print(f"[green]Updated:[/green] {title}")
 
 
@@ -156,18 +203,21 @@ def _assess_week(
             console.print(f"  [dim]Skipping {w.note_title} — no completion data[/dim]")
             continue
 
-        result = _extract_metrics(provider, w)
+        label = w.note_title or w.date.isoformat()
+        with console.status(f"  Extracting metrics: {label}...", spinner="dots"):
+            result = _extract_metrics(provider, w)
         updated = _apply_metrics(w, result)
         assessed.append((updated, result))
 
         if not dry_run:
             _write_local_workout(workouts_dir, updated)
             if w.note_title:
-                try:
-                    new_body = render_workout_note(updated)
-                    client.update_note(FOLDER_WORKOUTS, w.note_title, new_body)
-                except NoteNotFoundError:
-                    pass
+                import contextlib
+
+                with contextlib.suppress(NoteNotFoundError):
+                    client.update_note(
+                        FOLDER_WORKOUTS, w.note_title, render_workout_note_html(updated)
+                    )
 
     # Compute aggregate metrics
     completed = [w for w, _ in assessed if w.status == "completed"]
@@ -182,25 +232,27 @@ def _assess_week(
         f"- {w.date.isoformat()} {w.type} [{w.status}] RPE={w.rpe or '-'}" for w, _ in assessed
     )
 
-    summary = _generate_weekly_summary(
-        provider,
-        week,
-        len(completed),
-        len(weekly_workouts),
-        avg_rpe,
-        total_duration,
-        session_details,
-    )
-    next_week_notes = _generate_next_week_notes(
-        provider, week, completion_rate, avg_rpe, total_duration, session_details, summary
-    )
+    with console.status("Generating weekly summary...", spinner="dots"):
+        summary = _generate_weekly_summary(
+            provider,
+            week,
+            len(completed),
+            len(weekly_workouts),
+            avg_rpe,
+            total_duration,
+            session_details,
+        )
+    with console.status("Generating next-week notes...", spinner="dots"):
+        next_week_notes = _generate_next_week_notes(
+            provider, week, completion_rate, avg_rpe, total_duration, session_details, summary
+        )
 
     # Build assessment note
     prs: list[dict[str, Any]] = []
     for _, result in assessed:
         prs.extend(result.get("prs", []))
 
-    assessment_body = _render_assessment_note(
+    assessment_kwargs: dict[str, Any] = dict(
         week=week,
         sessions_planned=len(weekly_workouts),
         sessions_completed=len(completed),
@@ -213,22 +265,24 @@ def _assess_week(
         session_log=assessed,
         next_week_notes=next_week_notes,
     )
+    assessment_body = render_assessment_note(**assessment_kwargs)
 
     if dry_run:
         console.print(assessment_body)
         return
 
-    # Write ordering: local first, then Notes
+    # Write ordering: local first (plaintext), then Notes (HTML)
     assessments_dir = resolve_data_path(cfg, "assessments_dir")
     assessments_dir.mkdir(parents=True, exist_ok=True)
     (assessments_dir / f"{week}.md").write_text(assessment_body)
 
     assessment_title = assessment_note_title(week)
+    assessment_html = render_assessment_note_html(**assessment_kwargs)
     client.ensure_folder(FOLDER_ASSESSMENTS)
     if client.note_exists(FOLDER_ASSESSMENTS, assessment_title):
-        client.update_note(FOLDER_ASSESSMENTS, assessment_title, assessment_body)
+        client.update_note(FOLDER_ASSESSMENTS, assessment_title, assessment_html)
     else:
-        client.create_note(FOLDER_ASSESSMENTS, assessment_title, assessment_body)
+        client.create_note(FOLDER_ASSESSMENTS, assessment_title, assessment_html)
 
     console.print(f"[green]Assessment written:[/green] {assessment_title}")
     console.print(
@@ -253,11 +307,13 @@ def _extract_metrics(provider: InferenceProvider, workout: Workout) -> dict[str,
         how_it_went=workout.how_it_went or "(empty)",
         assess_schema=ASSESS_SCHEMA,
     )
-    req = InferenceRequest(system=ASSESS_SYSTEM, user=user, max_tokens=512)
+    req = InferenceRequest(
+        system=ASSESS_SYSTEM, user=user, max_tokens=512, schema=ASSESS_SCHEMA_DICT
+    )
     resp = provider.infer(req)
 
     try:
-        return cast(dict[str, Any], json.loads(resp.text))
+        return cast(dict[str, Any], json.loads(extract_json_text(resp.text)))
     except json.JSONDecodeError:
         # One retry
         correction = JSON_PARSE_CORRECTION.format(
@@ -266,7 +322,7 @@ def _extract_metrics(provider: InferenceProvider, workout: Workout) -> dict[str,
         retry_req = InferenceRequest(system=ASSESS_SYSTEM, user=correction, max_tokens=512)
         retry_resp = provider.infer(retry_req)
         try:
-            return cast(dict[str, Any], json.loads(retry_resp.text))
+            return cast(dict[str, Any], json.loads(extract_json_text(retry_resp.text)))
         except json.JSONDecodeError as e:
             raise InferenceParseError(f"Could not parse assessment JSON: {e}") from e
 
@@ -295,13 +351,7 @@ def _apply_metrics(workout: Workout, result: dict[str, Any]) -> Workout:
 def _write_local_workout(workouts_dir: Path, workout: Workout) -> None:
     """Write updated workout front matter + body to local file."""
     workouts_dir.mkdir(parents=True, exist_ok=True)
-    slug = (
-        (workout.note_title or workout.id)
-        .lower()
-        .replace(" ", "-")
-        .replace("—", "")
-        .replace("  ", "-")
-    )
+    slug = safe_slug(workout.note_title or workout.id)
     filename = f"{workout.date.isoformat()}-{slug[:40]}.md"
     path = workouts_dir / filename
     path.write_text(render_workout_note(workout))
@@ -372,62 +422,3 @@ def _generate_next_week_notes(
     )
     req = InferenceRequest(system=NEXT_WEEK_NOTES_SYSTEM, user=user, max_tokens=200)
     return provider.infer(req).text.strip()
-
-
-def _render_assessment_note(
-    *,
-    week: str,
-    sessions_planned: int,
-    sessions_completed: int,
-    sessions_skipped: int,
-    completion_rate: float,
-    avg_rpe: float | None,
-    total_duration_min: int,
-    prs: list[dict[str, Any]],
-    summary: str,
-    session_log: list[tuple[Workout, dict[str, Any]]],
-    next_week_notes: str,
-) -> str:
-    """Render the full assessment note as plaintext."""
-    prs_str = str(prs) if prs else "[]"
-    avg_rpe_str = f"{avg_rpe:.1f}" if avg_rpe is not None else ""
-
-    lines = [
-        "---",
-        f"week: {week}",
-        f"generated: {datetime.date.today().isoformat()}",
-        f"sessions_planned: {sessions_planned}",
-        f"sessions_completed: {sessions_completed}",
-        f"sessions_skipped: {sessions_skipped}",
-        f"completion_rate: {completion_rate:.2f}",
-        f"avg_rpe: {avg_rpe_str}",
-        f"total_duration_min: {total_duration_min}",
-        f"prs: {prs_str}",
-        "---",
-        "",
-        "## Summary",
-        summary,
-        "",
-        "## Session Log",
-        "| Date | Workout | Status | RPE | Duration |",
-        "|------|---------|--------|-----|----------|",
-    ]
-
-    for w, _ in session_log:
-        title = w.note_title or w.id
-        rpe_str = f"{w.rpe:.1f}" if w.rpe else "—"
-        dur_str = f"{w.duration_actual} min" if w.duration_actual else "—"
-        lines.append(f"| {w.date.isoformat()} | {title} | {w.status} | {rpe_str} | {dur_str} |")
-
-    lines.extend(
-        [
-            "",
-            "## Observations",
-            "(generated from session data above)",
-            "",
-            "## Next Week Notes",
-            next_week_notes,
-        ]
-    )
-
-    return "\n".join(lines)

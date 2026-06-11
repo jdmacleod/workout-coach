@@ -12,7 +12,7 @@ from coach.config import ConfigNotFoundError, load_config, resolve_data_path
 from coach.models.workout import Workout
 from coach.notes.client import NotesClient
 from coach.notes.exceptions import NotesClientError
-from coach.notes.parser import render_workout_note
+from coach.notes.parser import render_workout_note, render_workout_note_html
 from coach.notes.schema import FOLDER_WORKOUTS, workout_note_title
 
 console = Console()
@@ -102,12 +102,12 @@ def _run_log(
 
     body = render_workout_note(workout)
 
-    # Write to Apple Notes
+    # Write to Apple Notes (HTML for human-readable display)
     client = notes_client or NotesClient(account=cfg.notes.account, root_folder=cfg.notes.folder)
     client.ensure_folder(FOLDER_WORKOUTS)
-    client.create_note(FOLDER_WORKOUTS, note_title, body)
+    client.create_note(FOLDER_WORKOUTS, note_title, render_workout_note_html(workout))
 
-    # Write local file
+    # Write local file (plaintext YAML + Markdown as source of truth)
     filename = f"{workout_date.isoformat()}-{slug}.md"
     workouts_dir = resolve_data_path(cfg, "workouts_dir")
     workouts_dir.mkdir(parents=True, exist_ok=True)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import json
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 from rich.console import Console
@@ -24,18 +24,26 @@ from coach.intelligence.prompts import (
     PLAN_GENERATION_SYSTEM,
     PLAN_GENERATION_USER,
     PLAN_SCHEMA,
+    PLAN_SCHEMA_DICT,
+    extract_json_text,
 )
 from coach.intelligence.provider import InferenceProvider, InferenceRequest, get_provider
 from coach.models.plan import WeeklyPlan
 from coach.models.workout import Workout
 from coach.notes.client import NotesClient
 from coach.notes.exceptions import NotesClientError
-from coach.notes.parser import render_plan_note, render_workout_note
+from coach.notes.parser import (
+    render_plan_note,
+    render_plan_note_html,
+    render_workout_note,
+    render_workout_note_html,
+)
 from coach.notes.schema import (
     FOLDER_PLANS,
     FOLDER_WORKOUTS,
     assessment_note_title,
     plan_note_title,
+    safe_slug,
     workout_note_title,
 )
 
@@ -222,6 +230,7 @@ def _run_plan(
     # Set up clients
     client = notes_client or NotesClient(account=cfg.notes.account, root_folder=cfg.notes.folder)
     provider = inference_provider or get_provider(cfg)
+    console.print(f"[dim]{provider.display_name()}[/dim]")
 
     # Load Next Week Notes from prior assessment
     next_week_notes = _load_next_week_notes(cfg, target_week, client)
@@ -253,7 +262,10 @@ def _run_plan(
         user_prompt += f"\n\nOverride training focus: {focus}"
 
     # Call inference (with one retry on parse error)
-    raw_response = _infer_with_retry(provider, PLAN_GENERATION_SYSTEM, user_prompt, PLAN_SCHEMA)
+    with console.status("Thinking...", spinner="dots"):
+        raw_response = _infer_with_retry(
+            provider, PLAN_GENERATION_SYSTEM, user_prompt, PLAN_SCHEMA, PLAN_SCHEMA_DICT
+        )
 
     # Parse JSON response
     try:
@@ -312,43 +324,41 @@ def _run_plan(
     workouts_dir.mkdir(parents=True, exist_ok=True)
 
     for w in workouts:
-        slug = (
-            (w.note_title or "session")
-            .lower()
-            .replace(" ", "-")
-            .replace("—", "")
-            .replace("  ", "-")
-        )
+        slug = safe_slug(w.note_title or "session")
         filename = f"{w.date.isoformat()}-{slug[:40]}.md"
         (workouts_dir / filename).write_text(render_workout_note(w))
 
     local_plan_path.write_text(render_plan_note(plan))
     console.print("[green]Local files written.[/green]")
 
-    # Ensure Notes folders exist (idempotent; handles first-time-use without setup)
-    client.ensure_folder(FOLDER_PLANS)
-    client.ensure_folder(FOLDER_WORKOUTS)
-
-    # Write to Apple Notes (after all local files succeed)
-    for w in workouts:
-        if w.note_title and w.type != "rest":
-            client.create_note(FOLDER_WORKOUTS, w.note_title, render_workout_note(w))
-
-    plan_title = plan_note_title(target_week)
-    client.create_note(FOLDER_PLANS, plan_title, render_plan_note(plan))
+    with console.status("Updating Apple Notes...", spinner="dots"):
+        client.ensure_folder(FOLDER_PLANS)
+        client.ensure_folder(FOLDER_WORKOUTS)
+        for w in workouts:
+            if w.note_title and w.type != "rest":
+                client.create_note(FOLDER_WORKOUTS, w.note_title, render_workout_note_html(w))
+        plan_title = plan_note_title(target_week)
+        client.create_note(FOLDER_PLANS, plan_title, render_plan_note_html(plan))
     console.print("[green]Apple Notes updated.[/green]")
 
     _print_plan_table(plan)
 
 
-def _infer_with_retry(provider: InferenceProvider, system: str, user: str, schema: str) -> str:
+def _infer_with_retry(
+    provider: InferenceProvider,
+    system: str,
+    user: str,
+    schema: str,
+    schema_dict: dict[str, Any] | None = None,
+) -> str:
     """Call inference with one retry on parse failure."""
-    req = InferenceRequest(system=system, user=user, max_tokens=2048)
+    req = InferenceRequest(system=system, user=user, max_tokens=2048, schema=schema_dict)
     resp = provider.infer(req)
 
+    text = extract_json_text(resp.text)
     try:
-        json.loads(resp.text)
-        return resp.text
+        json.loads(text)
+        return text
     except json.JSONDecodeError:
         pass
 
@@ -356,7 +366,14 @@ def _infer_with_retry(provider: InferenceProvider, system: str, user: str, schem
     correction = JSON_PARSE_CORRECTION.format(previous_response=resp.text[:500], schema=schema)
     retry_req = InferenceRequest(system=system, user=correction, max_tokens=2048)
     retry_resp = provider.infer(retry_req)
-    return retry_resp.text
+    retry_text = extract_json_text(retry_resp.text)
+    try:
+        json.loads(retry_text)
+        return retry_text
+    except json.JSONDecodeError as e:
+        raise InferenceParseError(
+            f"Could not parse plan JSON after retry: {e}\nResponse: {retry_text[:200]}"
+        ) from e
 
 
 def _push_plan_to_notes(

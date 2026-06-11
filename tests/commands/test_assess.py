@@ -40,16 +40,18 @@ def _make_config(tmp_dir: str) -> Config:
     return cfg
 
 
-def _write_workout(workouts_dir: Path, date_str: str, title: str, status: str = "planned") -> None:
-    """Write a minimal workout file for testing."""
+def _write_workout(workouts_dir: Path, date_str: str, title: str, status: str = "planned") -> Path:
+    """Write a minimal workout file for testing. Returns the path written."""
     workouts_dir.mkdir(parents=True, exist_ok=True)
     slug = title.lower().replace(" ", "-")
+    note_title = f"{date_str} Strength — {title}"
     content = f"""---
 id: wrk-{date_str.replace("-", "")}-001
 date: {date_str}
 type: strength
 subtype: upper
 status: {status}
+note_title: {note_title}
 duration_planned: 55
 source: generated
 ---
@@ -66,7 +68,9 @@ Done all sets.
 
 Felt strong.
 """
-    (workouts_dir / f"{date_str}-{slug}.md").write_text(content)
+    path = workouts_dir / f"{date_str}-{slug}.md"
+    path.write_text(content)
+    return path
 
 
 def test_assess_week_produces_assessment_note_with_next_week_notes(tmp_path):
@@ -118,6 +122,65 @@ def test_assess_week_produces_assessment_note_with_next_week_notes(tmp_path):
     body = mock_client.get_note(FOLDER_ASSESSMENTS, notes[0])
     assert "## Next Week Notes" in body
     assert MOCK_NEXT_WEEK_NOTES in body
+
+
+def test_find_local_workout_by_title_finds_matching_workout(tmp_path):
+    """_find_local_workout_by_title returns a Workout when a local file matches the title."""
+    from coach.commands.assess import _find_local_workout_by_title
+
+    workouts_dir = tmp_path / "workouts"
+    _write_workout(workouts_dir, "2026-06-16", "Upper Body")
+    # note_title stored by _write_workout is "{date} Strength — {short_title}"
+    title = "2026-06-16 Strength — Upper Body"
+
+    result = _find_local_workout_by_title(workouts_dir, title)
+    assert result is not None
+    assert result.note_title == title
+
+
+def test_find_local_workout_by_title_returns_none_for_missing(tmp_path):
+    """_find_local_workout_by_title returns None when no matching local file exists."""
+    from coach.commands.assess import _find_local_workout_by_title
+
+    workouts_dir = tmp_path / "workouts"
+    result = _find_local_workout_by_title(workouts_dir, "2026-06-16 Strength — Nothing Here")
+    assert result is None
+
+
+def test_assess_single_merges_local_metadata_with_notes_content(tmp_path):
+    """_assess_single reads user edits from Apple Notes and structured metadata from local file."""
+    import dataclasses
+
+    from coach.commands.assess import _run_assess
+    from coach.notes.parser import render_workout_note_html, workout_from_note
+    from coach.notes.schema import FOLDER_WORKOUTS
+
+    cfg = _make_config(str(tmp_path))
+    mock_client = MockNotesClient()
+    provider = MockInferenceProvider(response_text=MOCK_ASSESS_RESPONSE)
+
+    workouts_dir = tmp_path / "workouts"
+    local_path = _write_workout(workouts_dir, "2026-06-16", "Upper Body")
+    title = "2026-06-16 Strength — Upper Body"  # matches note_title stored in FM by _write_workout
+
+    # Simulate user filling in "How It Went" directly in the Apple Notes HTML note
+    base_workout = workout_from_note(local_path.read_text(), local_path.stem)
+    edited = dataclasses.replace(base_workout, how_it_went="Great session, hit all PRs.")
+    mock_client.create_note(FOLDER_WORKOUTS, title, render_workout_note_html(edited))
+
+    with patch("coach.commands.assess.load_config", return_value=cfg):
+        _run_assess(
+            workout_title=title,
+            week=None,
+            dry_run=True,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    # Verify the provider received the user's completion content from Notes
+    assert len(provider.calls) >= 1
+    prompt_text = provider.calls[0].user
+    assert "Great session, hit all PRs." in prompt_text
 
 
 def test_assess_week_writes_local_assessment_file(tmp_path):
