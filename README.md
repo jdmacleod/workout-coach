@@ -5,6 +5,7 @@ logs sessions, and produces weekly assessments — all using a configurable LLM 
 on-device or via API. Plans and workouts sync to your iPhone automatically through iCloud.
 
 ```
+coach setup                   # run this first — creates config and Notes folders
 coach plan                    # generate next week's plan → writes to Apple Notes
 coach status                  # today's workout + week completion
 coach assess                  # assess completed workouts → produces weekly summary
@@ -97,7 +98,7 @@ Run `coach <command> --help` for full options on any command.
 
 ## Inference providers
 
-Configure the LLM in `config/config.toml`:
+`config/config.toml` is created by `coach setup`. Configure the LLM provider there:
 
 ```toml
 [llm]

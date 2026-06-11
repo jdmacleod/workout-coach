@@ -2,6 +2,9 @@
 
 Exercise Coach CLI — complete reference for every command and flag.
 
+> **First time?** Run `coach setup` before anything else. It creates `config/config.toml`,
+> the data directories, and the Apple Notes folder structure that all other commands depend on.
+
 All commands follow the pattern `coach <command> [options]`. Run `coach --help` or
 `coach <command> --help` for inline help at any time.
 
