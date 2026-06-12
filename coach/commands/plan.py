@@ -327,7 +327,8 @@ def _run_plan(
     workouts_dir.mkdir(parents=True, exist_ok=True)
 
     for w in workouts:
-        slug = safe_slug(w.note_title or "session")
+        title_suffix = (w.note_title or "session").removeprefix(w.date.isoformat() + " ")
+        slug = safe_slug(title_suffix)
         filename = f"{w.date.isoformat()}-{slug[:40]}.md"
         (workouts_dir / filename).write_text(render_workout_note(w))
 
