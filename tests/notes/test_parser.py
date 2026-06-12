@@ -163,6 +163,50 @@ def test_content_to_html_nested_list():
     assert html.count("</ul>") == 2
 
 
+def test_content_to_html_subheading_becomes_h3():
+    """Lines ending with ':' that are not list items render as <h3>."""
+    from coach.notes.parser import _content_to_html
+
+    content = "Main Lifts:\n- Back Squat: 4x5\n- Romanian Deadlift: 3x8\n\nAccessories:\n- Split Squat: 3x8"
+    html = _content_to_html(content, "placeholder")
+    assert "<h3>Main Lifts:</h3>" in html
+    assert "<h3>Accessories:</h3>" in html
+    assert "<li>Back Squat: 4x5</li>" in html
+    assert "<li>Romanian Deadlift: 3x8</li>" in html
+    assert "<li>Split Squat: 3x8</li>" in html
+    assert "<p>Main Lifts:</p>" not in html
+
+
+def test_content_to_html_list_item_with_colon_not_subheading():
+    """A list item that contains a colon does NOT become an <h3>."""
+    from coach.notes.parser import _content_to_html
+
+    content = "- Back Squat: 4x5\n- OHP: 3x8"
+    html = _content_to_html(content, "placeholder")
+    assert "<h3>" not in html
+    assert "<li>Back Squat: 4x5</li>" in html
+
+
+def test_md_subheadings_prefixes_colon_lines():
+    """_md_subheadings adds ### to non-list lines ending with ':'."""
+    from coach.notes.parser import _md_subheadings
+
+    content = "Warm-up:\n- goblet squat\nMain Lifts:\n- Back Squat: 4x5"
+    result = _md_subheadings(content)
+    assert result.startswith("### Warm-up:")
+    assert "### Main Lifts:" in result
+    assert "- goblet squat" in result
+    assert "- Back Squat: 4x5" in result
+
+
+def test_md_subheadings_idempotent():
+    """_md_subheadings does not double-prefix already-prefixed lines."""
+    from coach.notes.parser import _md_subheadings
+
+    content = "### Main Lifts:\n- Back Squat: 4x5"
+    assert _md_subheadings(content) == content
+
+
 def test_content_to_html_mixed_list_and_paragraph():
     """_content_to_html renders non-list lines as <p> elements alongside list blocks."""
     from coach.notes.parser import _content_to_html

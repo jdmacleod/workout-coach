@@ -81,6 +81,23 @@ def _fm_line(key: str, value: Any) -> str:
     return f"{key}: {value if value is not None else ''}"
 
 
+def _md_subheadings(content: str) -> str:
+    """Prefix sub-heading lines (non-list lines ending with ':') with '### '.
+
+    Keeps markdown structure consistent with HTML, where the same lines
+    become <h3> elements. Already-prefixed lines (starting with '#') are
+    left unchanged so the function is safe to call more than once.
+    """
+    lines = []
+    for ln in content.splitlines():
+        stripped = ln.strip()
+        if stripped.endswith(":") and not stripped.startswith(("#", "-", "*")):
+            lines.append(f"### {stripped}")
+        else:
+            lines.append(ln)
+    return "\n".join(lines)
+
+
 def render_workout_note(workout: Workout) -> str:
     """Render a Workout dataclass to note plaintext."""
     tags_str = ", ".join(workout.tags) if workout.tags else ""
@@ -103,7 +120,7 @@ def render_workout_note(workout: Workout) -> str:
         _fm_line("source", workout.source),
         "---",
     ]
-    planned = workout.planned_content or "<!-- Fill in after the workout. -->"
+    planned = _md_subheadings(workout.planned_content or "<!-- Fill in after the workout. -->")
     completed = (
         workout.completed_content
         or "<!-- Fill in after the workout. Free text or match the planned format. -->"
@@ -295,8 +312,8 @@ def _content_to_html(content: str | None, placeholder: str) -> str:
     """Render free-form or list content as HTML.
 
     Lines starting with '- ' or '* ' become list items; indented markers
-    produce nested lists. Lines without markers become <p> elements.
-    Single-line content becomes a single <p>.
+    produce nested lists. Non-list lines ending with ':' become <h3>
+    sub-headings. All other lines become <p> elements.
     """
     if not content or not content.strip():
         return f"<p><i>{placeholder}</i></p>"
@@ -308,6 +325,9 @@ def _content_to_html(content: str | None, placeholder: str) -> str:
     def _is_li(ln: str) -> bool:
         return ln.lstrip(" \t").startswith(("- ", "* "))
 
+    def _is_sh(ln: str) -> bool:
+        return ln.strip().endswith(":") and not _is_li(ln)
+
     def _indent(ln: str) -> int:
         return len(ln) - len(ln.lstrip(" \t"))
 
@@ -315,14 +335,16 @@ def _content_to_html(content: str | None, placeholder: str) -> str:
         return ln.lstrip(" \t")[2:]
 
     has_list = any(_is_li(ln) for ln in non_empty)
+    has_sh = any(_is_sh(ln) for ln in non_empty)
 
-    if not has_list:
+    # Fast paths: plain prose only
+    if not has_list and not has_sh:
         if len(non_empty) == 1:
             return f"<p>{_he(non_empty[0].strip())}</p>"
         items = "".join(f"<li>{_he(ln.strip())}</li>" for ln in non_empty)
         return f"<ul>{items}</ul>"
 
-    # Mixed content: consecutive list items → nested <ul>, other lines → <p>
+    # General case: sub-headings, list items, and prose may be mixed
     parts: list[str] = []
     pending: list[tuple[int, str]] = []
 
@@ -334,6 +356,9 @@ def _content_to_html(content: str | None, placeholder: str) -> str:
     for ln in non_empty:
         if _is_li(ln):
             pending.append((_indent(ln), _li_text(ln)))
+        elif _is_sh(ln):
+            flush()
+            parts.append(f"<h3>{_he(ln.strip())}</h3>")
         else:
             flush()
             parts.append(f"<p>{_he(ln.strip())}</p>")
