@@ -33,7 +33,7 @@ source: generated
 
 ## Planned
 
-Bench Press: 4×5
+Bench Press: 4x5
 
 ## Completed
 
@@ -71,7 +71,7 @@ def test_parse_sections_basic():
     assert "Planned" in sections
     assert "Completed" in sections
     assert "How It Went" in sections
-    assert sections["Planned"] == "Bench Press: 4×5"
+    assert sections["Planned"] == "Bench Press: 4x5"
     assert sections["Completed"] == "Done all sets."
     assert sections["How It Went"] == "Felt strong."
 
@@ -93,7 +93,7 @@ def test_workout_from_note_round_trip():
     assert workout.duration_planned == 55
     assert workout.duration_actual == 52
     assert workout.tags == ["push", "pull", "upper-body"]
-    assert workout.planned_content == "Bench Press: 4×5"
+    assert workout.planned_content == "Bench Press: 4x5"
     assert workout.completed_content == "Done all sets."
     assert workout.how_it_went == "Felt strong."
 

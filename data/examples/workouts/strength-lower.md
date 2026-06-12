@@ -18,22 +18,22 @@ source: generated
 ## Planned
 
 ### Main Lifts
-- Back Squat: 4×5 @ 80% 1RM
-- Romanian Deadlift: 3×8
+- Back Squat: 4x5 @ 80% 1RM
+- Romanian Deadlift: 3x8
 
 ### Accessories
-- Bulgarian Split Squat: 3×8 per leg
-- Nordic Curl: 3×8
-- Calf Raises: 3×15
+- Bulgarian Split Squat: 3x8 per leg
+- Nordic Curl: 3x8
+- Calf Raises: 3x15
 
 ## Completed
 
-Squat: 4×5 @ 110 kg. Third set felt heavy. Fourth set was a real grind — got all 5 reps
+Squat: 4x5 @ 110 kg. Third set felt heavy. Fourth set was a real grind — got all 5 reps
 but took longer rests.
-RDL: 3×8 @ 80 kg — controlled descent, good hamstring engagement.
-BSS: 3×8 per leg @ 20 kg — balance was off on the left, need more practice.
-Nordic curls: 3×6 (modified — couldn't complete 8 reps each set).
-Calf raises: 3×15 bodyweight.
+RDL: 3x8 @ 80 kg — controlled descent, good hamstring engagement.
+BSS: 3x8 per leg @ 20 kg — balance was off on the left, need more practice.
+Nordic curls: 3x6 (modified — couldn't complete 8 reps each set).
+Calf raises: 3x15 bodyweight.
 
 ## How It Went
 

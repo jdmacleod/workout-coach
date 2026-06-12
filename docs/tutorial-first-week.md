@@ -119,14 +119,14 @@ records, and notes on how the session felt.
 
 ```
 ## Completed
-Bench Press: 4×5 @ 90 kg
-Overhead Press: 3×8 @ 62.5 kg
-Pull-ups: 3×8, 3×7, 3×6
-Cable rows: 3×12 @ 55 kg
+Bench Press: 4x5 @ 90 kg
+Overhead Press: 3x8 @ 62.5 kg
+Pull-ups: 3x8, 3x7, 3x6
+Cable rows: 3x12 @ 55 kg
 
 ## How It Went
 RPE 7. Bench felt strong — matched last week at same weight. Overhead was tough on the
-3rd set. PR: OHP 62.5 kg × 8 reps.
+3rd set. PR: OHP 62.5 kg x 8 reps.
 ```
 
 For unplanned workouts (a spontaneous run, a class), log them directly:

@@ -18,7 +18,7 @@ source: generated
 ## Planned
 
 Warm-up: 10 min easy jog
-Main set: 6×400m @ 5K pace with 90 sec recovery jogs
+Main set: 6x400m @ 5K pace with 90 sec recovery jogs
 Cool-down: 10 min easy jog
 
 ## Completed

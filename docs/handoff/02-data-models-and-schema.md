@@ -42,12 +42,12 @@ source: generated
 ## Planned
 
 ### Main Lifts
-- Bench Press: 4×5 @ 80% 1RM
-- Barbell Row: 4×6
+- Bench Press: 4x5 @ 80% 1RM
+- Barbell Row: 4x6
 
 ### Accessories
-- Overhead Press: 3×8
-- Pull-ups: 3×max
+- Overhead Press: 3x8
+- Pull-ups: 3xmax
 
 ## Completed
 <!-- Fill in after the workout. Free text or match the planned format. -->

@@ -21,8 +21,8 @@ source: generated
 - Hip flexor stretch: 2 min per side
 - Thoracic rotations: 10 reps per side
 - Pigeon pose: 2 min per side
-- Shoulder pass-throughs with PVC: 2×10
-- Dead hangs: 3×20 sec
+- Shoulder pass-throughs with PVC: 2x10
+- Dead hangs: 3x20 sec
 
 ## Completed
 

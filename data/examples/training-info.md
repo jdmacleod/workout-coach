@@ -31,14 +31,14 @@ Cardio options include outdoor running and rowing.
 Warm-up (5 min): band pull-aparts, arm circles, light overhead press
 
 ### Main Lifts
-- Bench Press: 4×5 @ 80% 1RM
-- Overhead Press: 3×8 @ 70% 1RM
+- Bench Press: 4x5 @ 80% 1RM
+- Overhead Press: 3x8 @ 70% 1RM
 
 ### Accessories
-- Pull-ups: 3×max (or 3×8 with band assist)
-- Cable/band rows: 3×12
-- Tricep dips: 3×10
-- Face pulls: 3×15
+- Pull-ups: 3xmax (or 3x8 with band assist)
+- Cable/band rows: 3x12
+- Tricep dips: 3x10
+- Face pulls: 3x15
 
 ### Notes
 Target: 5–7 RPE on main lifts. Leave 2 reps in reserve. Focus on bar path and
@@ -49,13 +49,13 @@ controlled eccentric. Log all sets and weights.
 Warm-up (5 min): goblet squat, hip circles, glute bridges
 
 ### Main Lifts
-- Back Squat: 4×5 @ 80% 1RM
-- Romanian Deadlift: 3×8
+- Back Squat: 4x5 @ 80% 1RM
+- Romanian Deadlift: 3x8
 
 ### Accessories
-- Bulgarian Split Squat: 3×8 per leg
-- Nordic Curl or Leg Curl: 3×10
-- Calf Raises: 3×15
+- Bulgarian Split Squat: 3x8 per leg
+- Nordic Curl or Leg Curl: 3x10
+- Calf Raises: 3x15
 
 ### Notes
 Rest 3 min between main lift sets. 90 sec between accessories.
@@ -71,8 +71,8 @@ Finish with 5 min walking cool-down. No pushing.
 - Hip flexor stretch: 2 min per side
 - Thoracic rotations: 10 reps per side
 - Pigeon pose: 2 min per side
-- Shoulder pass-throughs: 2×10
-- Dead hangs: 3×20 sec
+- Shoulder pass-throughs: 2x10
+- Dead hangs: 3x20 sec
 
 ## Injury History
 

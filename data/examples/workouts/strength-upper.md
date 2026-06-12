@@ -18,21 +18,21 @@ source: generated
 ## Planned
 
 ### Main Lifts
-- Bench Press: 4×5 @ 80% 1RM
-- Overhead Press: 3×8 @ 70% 1RM
+- Bench Press: 4x5 @ 80% 1RM
+- Overhead Press: 3x8 @ 70% 1RM
 
 ### Accessories
-- Pull-ups: 3×max
-- Band rows: 3×12
-- Tricep pushdowns: 3×12
+- Pull-ups: 3xmax
+- Band rows: 3x12
+- Tricep pushdowns: 3x12
 
 ## Completed
 
-Bench: 4×5 @ 90 kg. Felt strong on first 3 sets, a little grind on set 4.
-Overhead press: 3×8 @ 55 kg — clean throughout.
+Bench: 4x5 @ 90 kg. Felt strong on first 3 sets, a little grind on set 4.
+Overhead press: 3x8 @ 55 kg — clean throughout.
 Pull-ups: 9, 8, 7. Tired by set 3.
-Band rows: 3×12 — easy, will go heavier next time.
-Tricep pushdowns: 3×12.
+Band rows: 3x12 — easy, will go heavier next time.
+Tricep pushdowns: 3x12.
 
 ## How It Went
 

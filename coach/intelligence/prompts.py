@@ -63,7 +63,7 @@ PLAN_SCHEMA = """{
       "subtype": "string",
       "duration_minutes": 0,
       "title": "concise subtitle only — no type word, no date. BAD: 'Strength Upper Body', GOOD: 'Upper Body Push'. BAD: 'Cardio Zone 2', GOOD: 'Zone 2 Run'.",
-      "planned_content": "Use section headings ending in ':' (e.g. 'Warm-up:', 'Main Lifts:', 'Accessories:') followed by '- item' lines. Each exercise on its own line. No comma-separated activities within a single bullet.",
+      "planned_content": "Use section headings ending in ':' (e.g. 'Warm-up:', 'Main Lifts:', 'Accessories:') followed by '- item' lines. Each exercise on its own line. Use 'x' for sets/reps (e.g. '4x5', '3x8'). No comma-separated activities within a single bullet.",
       "rationale": "string"
     }
   ]
