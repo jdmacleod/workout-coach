@@ -120,7 +120,7 @@ def test_render_workout_note_html_structure():
         subtype="upper",
         duration_planned=55,
         planned_content="Bench Press 4x5\nOHP 3x8",
-        note_title="2026-06-17 Strength - Upper Body Push",
+        note_title="2026-06-17 Upper Body Push",
     )
     html = render_workout_note_html(workout)
     assert "<h1>" not in html
@@ -194,7 +194,7 @@ def test_render_plan_note_html_structure():
             status="planned",
             source="generated",
             duration_planned=55,
-            note_title="2026-06-16 Strength - Upper Body",
+            note_title="2026-06-16 Upper Body",
         ),
         Workout(
             id="w2",
@@ -203,7 +203,7 @@ def test_render_plan_note_html_structure():
             status="planned",
             source="generated",
             duration_planned=45,
-            note_title="2026-06-18 Cardio - Zone 2",
+            note_title="2026-06-18 Zone 2",
         ),
     ]
     plan = WeeklyPlan(

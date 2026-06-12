@@ -22,7 +22,7 @@ def workout_note_title(date_str: str, subtitle: str) -> str:
     date_str: YYYY-MM-DD
     subtitle: e.g. "Upper Body Push"
     """
-    return f"{date_str} - {subtitle}"
+    return f"{date_str} {subtitle}"
 
 
 def plan_note_title(week: str) -> str:
