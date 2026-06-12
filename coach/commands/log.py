@@ -82,7 +82,6 @@ def _run_log(
     note_id = f"wrk-{workout_date.isoformat().replace('-', '')}-log"
     note_title = workout_note_title(
         workout_date.isoformat(),
-        workout_type.capitalize(),
         title,
     )
 

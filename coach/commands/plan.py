@@ -291,7 +291,6 @@ def _run_plan(
 
         note_title = workout_note_title(
             session_date.isoformat(),
-            wtype.capitalize(),
             wtitle,
         )
         slug = f"{wtitle.lower().replace(' ', '-')}"

@@ -44,7 +44,7 @@ def _write_workout(workouts_dir: Path, date_str: str, title: str, status: str = 
     """Write a minimal workout file for testing. Returns the path written."""
     workouts_dir.mkdir(parents=True, exist_ok=True)
     slug = title.lower().replace(" ", "-")
-    note_title = f"{date_str} Strength — {title}"
+    note_title = f"{date_str} - {title}"
     content = f"""---
 id: wrk-{date_str.replace("-", "")}-001
 date: {date_str}
@@ -130,8 +130,8 @@ def test_find_local_workout_by_title_finds_matching_workout(tmp_path):
 
     workouts_dir = tmp_path / "workouts"
     _write_workout(workouts_dir, "2026-06-16", "Upper Body")
-    # note_title stored by _write_workout is "{date} Strength — {short_title}"
-    title = "2026-06-16 Strength — Upper Body"
+    # note_title stored by _write_workout is "{date} - {short_title}"
+    title = "2026-06-16 - Upper Body"
 
     result = _find_local_workout_by_title(workouts_dir, title)
     assert result is not None
@@ -143,7 +143,7 @@ def test_find_local_workout_by_title_returns_none_for_missing(tmp_path):
     from coach.commands.assess import _find_local_workout_by_title
 
     workouts_dir = tmp_path / "workouts"
-    result = _find_local_workout_by_title(workouts_dir, "2026-06-16 Strength — Nothing Here")
+    result = _find_local_workout_by_title(workouts_dir, "2026-06-16 - Nothing Here")
     assert result is None
 
 
@@ -161,7 +161,7 @@ def test_assess_single_merges_local_metadata_with_notes_content(tmp_path):
 
     workouts_dir = tmp_path / "workouts"
     local_path = _write_workout(workouts_dir, "2026-06-16", "Upper Body")
-    title = "2026-06-16 Strength — Upper Body"  # matches note_title stored in FM by _write_workout
+    title = "2026-06-16 - Upper Body"  # matches note_title stored in FM by _write_workout
 
     # Simulate user filling in "How It Went" directly in the Apple Notes HTML note
     base_workout = workout_from_note(local_path.read_text(), local_path.stem)

@@ -16,15 +16,13 @@ FOLDER_PLANS = "Exercise Coach/Plans"
 FOLDER_ASSESSMENTS = "Exercise Coach/Assessments"
 
 
-def workout_note_title(date_str: str, workout_type: str, subtitle: str) -> str:
+def workout_note_title(date_str: str, subtitle: str) -> str:
     """Build a workout note title from components.
 
     date_str: YYYY-MM-DD
-    workout_type: e.g. "Strength"
-    subtitle: e.g. "Upper Body"
+    subtitle: e.g. "Upper Body Push"
     """
-    type_cap = workout_type.capitalize()
-    return f"{date_str} {type_cap} - {subtitle}"
+    return f"{date_str} - {subtitle}"
 
 
 def plan_note_title(week: str) -> str:
