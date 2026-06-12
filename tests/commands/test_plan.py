@@ -394,7 +394,8 @@ def test_normalize_promotes_plain_items_in_section():
         "### Accessories:\n"
         "- Bulgarian Split Squat: 3x8 per leg\n"
         "Nordic Curl or Leg Curl: 3x10\n"
-        "Calf Raises: 3x15"
+        "Calf Raises: 3x15\n"
+        "Notes: Rest 3 min between main lift sets."
     )
     result = _normalize_planned_content(content, "strength")
     lines = result.splitlines()
@@ -403,6 +404,9 @@ def test_normalize_promotes_plain_items_in_section():
     assert "- Bulgarian Split Squat: 3x8 per leg" in lines
     assert "- Nordic Curl or Leg Curl: 3x10" in lines
     assert "- Calf Raises: 3x15" in lines
+    # Notes: is not a list item
+    assert "Notes: Rest 3 min between main lift sets." in lines
+    assert "- Notes: Rest 3 min between main lift sets." not in lines
 
 
 def test_normalize_preserves_already_bulleted_items():

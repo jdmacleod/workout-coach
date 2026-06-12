@@ -141,7 +141,11 @@ def _normalize_planned_content(content: str, wtype: str) -> str:
             in_section = False
             result.append(ln)
         elif in_section and not stripped.startswith(("-", "*", "#")):
-            result.append(f"- {stripped}")
+            if stripped.startswith(("Notes:", "Note:")):
+                in_section = False
+                result.append(ln)
+            else:
+                result.append(f"- {stripped}")
         else:
             result.append(ln)
 
