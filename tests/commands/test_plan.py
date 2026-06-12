@@ -383,6 +383,47 @@ def test_safe_slug_strips_leading_trailing_hyphens():
     assert not result.endswith("-")
 
 
+def test_normalize_promotes_plain_items_in_section():
+    """_normalize_planned_content promotes plain-text items under section headings to list items."""
+    from coach.commands.plan import _normalize_planned_content
+
+    content = (
+        "### Main Lifts:\n"
+        "- Back Squat: 3x5 @ 80% 1RM\n"
+        "Romanian Deadlift: 3x8\n"
+        "### Accessories:\n"
+        "- Bulgarian Split Squat: 3x8 per leg\n"
+        "Nordic Curl or Leg Curl: 3x10\n"
+        "Calf Raises: 3x15"
+    )
+    result = _normalize_planned_content(content, "strength")
+    lines = result.splitlines()
+    assert "- Back Squat: 3x5 @ 80% 1RM" in lines
+    assert "- Romanian Deadlift: 3x8" in lines
+    assert "- Bulgarian Split Squat: 3x8 per leg" in lines
+    assert "- Nordic Curl or Leg Curl: 3x10" in lines
+    assert "- Calf Raises: 3x15" in lines
+
+
+def test_normalize_preserves_already_bulleted_items():
+    """_normalize_planned_content does not double-bullet items that already have '- ' prefix."""
+    from coach.commands.plan import _normalize_planned_content
+
+    content = "### Warm-up:\n- arm circles\n- band pull-aparts\n"
+    result = _normalize_planned_content(content, "strength")
+    assert "- - arm circles" not in result
+    assert "- arm circles" in result
+
+
+def test_normalize_noop_for_non_strength():
+    """_normalize_planned_content returns content unchanged for non-strength workout types."""
+    from coach.commands.plan import _normalize_planned_content
+
+    content = "Zone 2 run\n30 minutes easy"
+    assert _normalize_planned_content(content, "cardio") == content
+    assert _normalize_planned_content(content, "mobility") == content
+
+
 def test_plan_live_writes_file_for_slash_in_title(tmp_path):
     """coach plan writes workout files when LLM returns a title containing '/' (regression for FileNotFoundError)."""
     import json

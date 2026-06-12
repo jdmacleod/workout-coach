@@ -94,38 +94,57 @@ _STRENGTH_HEADINGS = ("Warm-up", "Main Lifts", "Accessories")
 
 
 def _normalize_planned_content(content: str, wtype: str) -> str:
-    """Split inline 'Heading: item1, item2' lines into proper heading + bullets.
+    """Normalize LLM-generated planned content into consistent heading + bullet form.
 
-    The LLM reliably uses bullet lists for Main Lifts/Accessories but often
-    collapses Warm-up (and occasionally other headings) into a single line:
-      Warm-up: goblet squat, hip circles, glute bridges
-    This normalises those lines to:
-      Warm-up:
-      - goblet squat
-      - hip circles
-      - glute bridges
-    Only applied to strength workouts and only for the known section headings.
+    Handles two LLM output patterns:
+
+    1. Single-line: "Main Lifts: item1, item2" → heading + one bullet per item
+    2. Multi-line: heading on its own line, items below — some bulleted, some not.
+       Plain-text items under a known section heading are promoted to list items.
+
+    Only applied to strength and hiit workouts.
     """
     if wtype not in ("strength", "hiit"):
         return content
     lines = content.splitlines()
-    result: list[str] = []
+
+    # Pass 1: expand "Heading: item1, item2" single-line form
+    expanded: list[str] = []
     for ln in lines:
         stripped = ln.strip()
-        split = False
+        matched = False
         for heading in _STRENGTH_HEADINGS:
             prefix = heading + ": "
             if stripped.startswith(prefix) and not stripped.endswith(":"):
-                result.append(heading + ":")
-                items_text = stripped[len(prefix) :]
-                for item in items_text.split(","):
+                expanded.append(heading + ":")
+                for item in stripped[len(prefix) :].split(","):
                     item = item.strip().rstrip(".")
                     if item:
-                        result.append(f"- {item}")
-                split = True
+                        expanded.append(f"- {item}")
+                matched = True
                 break
-        if not split:
+        if not matched:
+            expanded.append(ln)
+
+    # Pass 2: within each known section, promote plain-text lines to list items.
+    # The LLM often bullets only the first item and leaves the rest as plain text.
+    section_headings = {h + ":" for h in _STRENGTH_HEADINGS}
+    result: list[str] = []
+    in_section = False
+    for ln in expanded:
+        stripped = ln.strip()
+        heading_text = stripped.lstrip("#").strip()
+        if heading_text in section_headings:
+            in_section = True
             result.append(ln)
+        elif not stripped:
+            in_section = False
+            result.append(ln)
+        elif in_section and not stripped.startswith(("-", "*", "#")):
+            result.append(f"- {stripped}")
+        else:
+            result.append(ln)
+
     return "\n".join(result)
 
 
