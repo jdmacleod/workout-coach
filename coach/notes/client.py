@@ -146,8 +146,8 @@ class NotesClient:
 
     # ── Note operations ────────────────────────────────────────────────────────
 
-    def create_note(self, folder: str, title: str, body: str) -> None:
-        """Create a new note in the given folder.
+    def create_note(self, folder: str, title: str, body: str) -> str | None:
+        """Create a new note in the given folder. Returns the x-coredata ID.
 
         Two-step: create with name only, then set body separately.
         Setting body in creation properties prevents correct HTML rendering.
@@ -160,9 +160,11 @@ class NotesClient:
 {setup}
     set theNote to make new note at targetFolder with properties {{name:"{title_esc}"}}
     set body of theNote to "{body_esc}"
+    return id of theNote
 end tell
 """
-        _run_applescript(script)
+        result = _run_applescript(script)
+        return result if result else None
 
     def get_note(self, folder: str, title: str) -> str:
         """Return the plaintext body of a note. Raises NoteNotFoundError if absent."""

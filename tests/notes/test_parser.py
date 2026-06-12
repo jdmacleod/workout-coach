@@ -329,6 +329,66 @@ def test_render_assessment_note_html_stats_and_sections():
     assert "Keep it up." in html
 
 
+def test_render_plan_note_html_with_note_urls():
+    """render_plan_note_html wraps workout titles in <a href=...> when note_urls provided."""
+    from datetime import date as d
+
+    from coach.models.plan import WeeklyPlan
+
+    sessions = [
+        Workout(
+            id="w1",
+            date=d(2026, 6, 16),
+            type="strength",
+            status="planned",
+            source="generated",
+            duration_planned=55,
+            note_title="2026-06-16 Upper Body",
+        ),
+    ]
+    plan = WeeklyPlan(
+        week="2026-W25",
+        generated=d(2026, 6, 10),
+        training_focus="strength",
+        weekly_volume="moderate",
+        workouts=sessions,
+    )
+    note_urls = {"2026-06-16 Upper Body": "applenotes://showNote?identifier=MY-UUID"}
+    html = render_plan_note_html(plan, note_urls)
+    assert 'href="applenotes://showNote?identifier=MY-UUID"' in html
+    assert "2026-06-16 Upper Body" in html
+    assert "<a " in html
+
+
+def test_render_plan_note_html_without_note_urls_no_links():
+    """render_plan_note_html renders plain text titles when note_urls is None."""
+    from datetime import date as d
+
+    from coach.models.plan import WeeklyPlan
+
+    sessions = [
+        Workout(
+            id="w1",
+            date=d(2026, 6, 16),
+            type="strength",
+            status="planned",
+            source="generated",
+            duration_planned=55,
+            note_title="2026-06-16 Upper Body",
+        ),
+    ]
+    plan = WeeklyPlan(
+        week="2026-W25",
+        generated=d(2026, 6, 10),
+        training_focus="strength",
+        weekly_volume="moderate",
+        workouts=sessions,
+    )
+    html = render_plan_note_html(plan)
+    assert "<a href=" not in html
+    assert "2026-06-16 Upper Body" in html
+
+
 def test_render_assessment_note_html_prs_section():
     """render_assessment_note_html includes a Personal Records section when prs provided."""
     html = render_assessment_note_html(

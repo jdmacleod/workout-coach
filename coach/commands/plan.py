@@ -386,11 +386,29 @@ def _run_plan(
     with console.status("Updating Apple Notes...", spinner="dots"):
         client.ensure_folder(FOLDER_PLANS)
         client.ensure_folder(FOLDER_WORKOUTS)
+        note_xcids: dict[str, str] = {}
         for w in workouts:
             if w.note_title and w.type != "rest":
-                client.create_note(FOLDER_WORKOUTS, w.note_title, render_workout_note_html(w))
+                xcid = client.create_note(
+                    FOLDER_WORKOUTS, w.note_title, render_workout_note_html(w)
+                )
+                if xcid and w.note_title:
+                    note_xcids[w.note_title] = xcid
+
+        note_urls: dict[str, str] = {}
+        if cfg.notes.plan_note_links and note_xcids:
+            from coach.notes.sqlite import _url_id, lookup_uuids
+
+            pks = {title: _url_id(xcid) for title, xcid in note_xcids.items()}
+            uuid_map = lookup_uuids([pk for pk in pks.values() if pk])
+            for title, pk in pks.items():
+                uuid = uuid_map.get(pk, "")
+                identifier = uuid or pk
+                if identifier:
+                    note_urls[title] = f"applenotes://showNote?identifier={identifier}"
+
         plan_title = plan_note_title(target_week)
-        client.create_note(FOLDER_PLANS, plan_title, render_plan_note_html(plan))
+        client.create_note(FOLDER_PLANS, plan_title, render_plan_note_html(plan, note_urls or None))
     console.print("[green]Apple Notes updated.[/green]")
 
     _print_plan_table(plan)

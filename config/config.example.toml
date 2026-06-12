@@ -48,6 +48,10 @@ injury_notes          = ""                  # free text; empty means none
 [notes]
 account = "iCloud"            # Must match the account name in Notes.app exactly
 folder  = "Exercise Coach"    # Root folder; subfolders are created by setup
+# Embed clickable applenotes:// links in the plan schedule.
+# Numeric links always work; stable UUID links require Full Disk Access for Terminal
+# (System Settings → Privacy & Security → Full Disk Access).
+plan_note_links = true
 
 # ── Data Paths ────────────────────────────────────────────────────────────────
 # All paths are relative to the project root.

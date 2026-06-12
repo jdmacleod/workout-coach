@@ -99,12 +99,22 @@ def _run_questionnaire() -> None:
         default="general fitness",
     )
     injuries = typer.prompt("Any injuries or limitations? (leave blank if none)", default="")
+    links_answer = typer.prompt(
+        "Embed clickable links in the plan note? "
+        "(numeric links always work; stable links need Full Disk Access for Terminal)",
+        default="y",
+    )
+    plan_note_links = links_answer.lower().strip() in ("y", "yes", "true", "1")
 
-    _write_config_values(name=name, days=days, goal=goal, injuries=injuries)
+    _write_config_values(
+        name=name, days=days, goal=goal, injuries=injuries, plan_note_links=plan_note_links
+    )
     console.print("[green]Config updated.[/green]")
 
 
-def _write_config_values(*, name: str, days: str, goal: str, injuries: str) -> None:
+def _write_config_values(
+    *, name: str, days: str, goal: str, injuries: str, plan_note_links: bool = True
+) -> None:
     """Update key fields in config.toml."""
     text = CONFIG_FILE.read_text()
 
@@ -120,12 +130,19 @@ def _write_config_values(*, name: str, days: str, goal: str, injuries: str) -> N
     text = _set(text, "primary_goal", goal)
     text = _set(text, "injury_notes", injuries)
 
-    # fitness_days_per_week is an integer, no quotes
     import re
 
+    # fitness_days_per_week is an integer, no quotes
     text = re.sub(
         r"^(fitness_days_per_week\s*=\s*).*$",
         rf"\g<1>{days}",
+        text,
+        flags=re.MULTILINE,
+    )
+    # plan_note_links is a boolean, no quotes
+    text = re.sub(
+        r"^(plan_note_links\s*=\s*).*$",
+        rf"\g<1>{'true' if plan_note_links else 'false'}",
         text,
         flags=re.MULTILINE,
     )

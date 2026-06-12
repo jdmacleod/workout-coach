@@ -420,10 +420,15 @@ def render_workout_note_html(workout: Workout) -> str:
     return "\n".join(parts)
 
 
-def render_plan_note_html(plan: WeeklyPlan) -> str:
+def render_plan_note_html(
+    plan: WeeklyPlan,
+    note_urls: dict[str, str] | None = None,
+) -> str:
     """Render a WeeklyPlan to HTML for Apple Notes display (no YAML front matter).
 
     The <h1> is the first line of the body — Apple Notes derives the note's name from it.
+    When note_urls is provided, workout titles in the schedule become clickable
+    applenotes:// links.
     """
     focus = _he(plan.training_focus.capitalize())
     volume = _he(plan.weekly_volume.capitalize())
@@ -433,8 +438,13 @@ def render_plan_note_html(plan: WeeklyPlan) -> str:
     for w in plan.workouts:
         day = _he(w.date.strftime("%a")) if w.date else "-"
         title_text = _he(w.note_title or f"{w.type.capitalize()} session")
+        url = (note_urls or {}).get(w.note_title or "")
+        if url:
+            title_html = f'<a href="{_he(url)}">{title_text}</a>'
+        else:
+            title_html = title_text
         dur = f" - {w.duration_planned}&nbsp;min" if w.duration_planned else ""
-        items.append(f"<li><b>{day}</b> - {title_text}{dur}</li>")
+        items.append(f"<li><b>{day}</b> - {title_html}{dur}</li>")
     schedule_html = (
         f"<ul>{''.join(items)}</ul>" if items else "<p><i>No sessions scheduled.</i></p>"
     )

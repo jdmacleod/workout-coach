@@ -68,6 +68,7 @@ class ProfileConfig:
 class NotesConfig:
     account: str = "iCloud"
     folder: str = "Exercise Coach"
+    plan_note_links: bool = True
 
 
 @dataclass
