@@ -263,19 +263,83 @@ def _he(value: Any) -> str:
     return _html.escape(str(value)) if value is not None else ""
 
 
+def _render_nested_list(items: list[tuple[int, str]]) -> str:
+    """Convert (indent_level, text) pairs into nested <ul>/<li> HTML."""
+    html: list[str] = []
+    depth_stack: list[int] = []
+
+    for indent, text in items:
+        if not depth_stack:
+            html.append("<ul>")
+            html.append(f"<li>{_he(text)}")
+            depth_stack.append(indent)
+        elif indent > depth_stack[-1]:
+            html.append(f"<ul><li>{_he(text)}")
+            depth_stack.append(indent)
+        elif indent == depth_stack[-1]:
+            html.append(f"</li><li>{_he(text)}")
+        else:
+            while len(depth_stack) > 1 and indent < depth_stack[-1]:
+                html.append("</li></ul>")
+                depth_stack.pop()
+            html.append(f"</li><li>{_he(text)}")
+
+    while depth_stack:
+        html.append("</li></ul>")
+        depth_stack.pop()
+
+    return "".join(html)
+
+
 def _content_to_html(content: str | None, placeholder: str) -> str:
     """Render free-form or list content as HTML.
 
-    Multi-line content becomes a <ul>/<li> list; single-line becomes a <p>.
-    None or empty shows an italicised placeholder.
+    Lines starting with '- ' or '* ' become list items; indented markers
+    produce nested lists. Lines without markers become <p> elements.
+    Single-line content becomes a single <p>.
     """
     if not content or not content.strip():
         return f"<p><i>{placeholder}</i></p>"
-    lines = [ln.strip() for ln in content.splitlines() if ln.strip()]
-    if len(lines) > 1:
-        items = "".join(f"<li>{_he(ln)}</li>" for ln in lines)
+
+    non_empty = [ln for ln in content.splitlines() if ln.strip()]
+    if not non_empty:
+        return f"<p><i>{placeholder}</i></p>"
+
+    def _is_li(ln: str) -> bool:
+        return ln.lstrip(" \t").startswith(("- ", "* "))
+
+    def _indent(ln: str) -> int:
+        return len(ln) - len(ln.lstrip(" \t"))
+
+    def _li_text(ln: str) -> str:
+        return ln.lstrip(" \t")[2:]
+
+    has_list = any(_is_li(ln) for ln in non_empty)
+
+    if not has_list:
+        if len(non_empty) == 1:
+            return f"<p>{_he(non_empty[0].strip())}</p>"
+        items = "".join(f"<li>{_he(ln.strip())}</li>" for ln in non_empty)
         return f"<ul>{items}</ul>"
-    return f"<p>{_he(lines[0])}</p>"
+
+    # Mixed content: consecutive list items → nested <ul>, other lines → <p>
+    parts: list[str] = []
+    pending: list[tuple[int, str]] = []
+
+    def flush() -> None:
+        if pending:
+            parts.append(_render_nested_list(list(pending)))
+            pending.clear()
+
+    for ln in non_empty:
+        if _is_li(ln):
+            pending.append((_indent(ln), _li_text(ln)))
+        else:
+            flush()
+            parts.append(f"<p>{_he(ln.strip())}</p>")
+
+    flush()
+    return "".join(parts)
 
 
 def _para_html(content: str | None, placeholder: str) -> str:
@@ -459,7 +523,6 @@ def render_assessment_note_html(
         pr_parts = ["<h2>Personal Records</h2>", f"<ul>{pr_items}</ul>"]
 
     parts = [
-        f"<h1>Assessment - Week {_he(week)}</h1>",
         (
             f"<p><b>Completion:</b> {sessions_completed}/{sessions_planned} ({completion_pct})"
             f" &nbsp; <b>Avg RPE:</b> {avg_rpe_str}"

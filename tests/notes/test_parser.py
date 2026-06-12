@@ -148,6 +148,32 @@ def test_render_workout_note_html_multiline_planned_becomes_list():
     assert "<li>OHP 3x8</li>" in html
 
 
+def test_content_to_html_nested_list():
+    """_content_to_html renders indented '- ' markers as nested <ul> elements."""
+    from coach.notes.parser import _content_to_html
+
+    content = "- Bench Press: 4x5\n  - Warmup: 2x10\n  - Work: 4x5\n- OHP: 3x8"
+    html = _content_to_html(content, "placeholder")
+    assert "<ul>" in html
+    assert "<li>Bench Press: 4x5" in html
+    assert "<li>Warmup: 2x10</li>" in html
+    assert "<li>Work: 4x5</li>" in html
+    assert "<li>OHP: 3x8</li>" in html
+    assert html.count("<ul>") == 2
+    assert html.count("</ul>") == 2
+
+
+def test_content_to_html_mixed_list_and_paragraph():
+    """_content_to_html renders non-list lines as <p> elements alongside list blocks."""
+    from coach.notes.parser import _content_to_html
+
+    content = "Note: go heavy today\n- Squat: 5x5\n- Deadlift: 3x3"
+    html = _content_to_html(content, "placeholder")
+    assert "<p>Note: go heavy today</p>" in html
+    assert "<li>Squat: 5x5</li>" in html
+    assert "<li>Deadlift: 3x3</li>" in html
+
+
 def test_render_workout_note_html_empty_content_shows_placeholder():
     """No planned_content renders an italic placeholder, not blank."""
     workout = Workout(
@@ -251,7 +277,7 @@ def test_render_assessment_note_html_stats_and_sections():
         session_log=[(workout, {})],
         next_week_notes="Keep it up.",
     )
-    assert "<h1>Assessment - Week 2026-W25</h1>" in html
+    assert "<h1>" not in html
     assert "2/3" in html
     assert "<h2>Session Log</h2>" in html
     assert "<li>" in html
