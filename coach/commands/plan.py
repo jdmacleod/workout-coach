@@ -289,6 +289,12 @@ def _run_plan(
         wtype = session.get("type", "strength")
         wtitle = session.get("title", "Session")
 
+        # Strip leading type word if the LLM echoed it despite schema instructions
+        # e.g. type="strength", title="Strength Lower Body" → "Lower Body"
+        type_prefix = wtype.capitalize() + " "
+        if wtitle.startswith(type_prefix):
+            wtitle = wtitle.removeprefix(type_prefix)
+
         note_title = workout_note_title(
             session_date.isoformat(),
             wtitle,

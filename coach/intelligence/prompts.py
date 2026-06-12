@@ -62,7 +62,7 @@ PLAN_SCHEMA = """{
       "type": "strength|cardio|hiit|mobility|rest|external",
       "subtype": "string",
       "duration_minutes": 0,
-      "title": "concise subtitle only — no type, no date, e.g. 'Upper Body Push', 'Zone 2 Run', 'Tempo Intervals'",
+      "title": "concise subtitle only — no type word, no date. BAD: 'Strength Upper Body', GOOD: 'Upper Body Push'. BAD: 'Cardio Zone 2', GOOD: 'Zone 2 Run'.",
       "planned_content": "string",
       "rationale": "string"
     }
