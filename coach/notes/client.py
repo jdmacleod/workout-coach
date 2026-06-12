@@ -147,14 +147,19 @@ class NotesClient:
     # ── Note operations ────────────────────────────────────────────────────────
 
     def create_note(self, folder: str, title: str, body: str) -> None:
-        """Create a new note in the given folder."""
+        """Create a new note in the given folder.
+
+        Two-step: create with name only, then set body separately.
+        Setting body in creation properties prevents correct HTML rendering.
+        """
         account_esc = _escape_for_applescript(self._account)
         title_esc = _escape_for_applescript(title)
         body_esc = _escape_for_applescript(body)
         setup = "\n".join(_folder_script_lines(folder, account_esc))
         script = f"""tell application "Notes"
 {setup}
-    make new note at targetFolder with properties {{name:"{title_esc}", body:"{body_esc}"}}
+    set theNote to make new note at targetFolder with properties {{name:"{title_esc}"}}
+    set body of theNote to "{body_esc}"
 end tell
 """
         _run_applescript(script)

@@ -110,7 +110,7 @@ def test_workout_from_note_missing_optional_fields():
 
 
 def test_render_workout_note_html_structure():
-    """render_workout_note_html produces metadata line and h2 section headings (no H1 — Apple Notes shows note name)."""
+    """render_workout_note_html produces h1 title, metadata line, and h2 section headings."""
     workout = Workout(
         id="wrk-20260617-001",
         date=date(2026, 6, 17),
@@ -123,7 +123,7 @@ def test_render_workout_note_html_structure():
         note_title="2026-06-17 Upper Body Push",
     )
     html = render_workout_note_html(workout)
-    assert "<h1>" not in html
+    assert "<h1>2026-06-17 Upper Body Push</h1>" in html
     assert "<b>Type:</b>" in html
     assert "<b>Duration:</b>" in html
     assert "<h2>Planned</h2>" in html
@@ -251,7 +251,7 @@ def test_render_workout_note_html_escapes_special_chars():
 
 
 def test_render_plan_note_html_structure():
-    """render_plan_note_html produces metadata line and bulleted schedule (no H1 — Apple Notes shows note name)."""
+    """render_plan_note_html produces h1 week title, metadata line, and bulleted schedule."""
     from datetime import date as d
 
     from coach.models.plan import WeeklyPlan
@@ -285,7 +285,7 @@ def test_render_plan_note_html_structure():
         generation_notes="Balanced week.",
     )
     html = render_plan_note_html(plan)
-    assert "<h1>" not in html
+    assert "<h1>Week 2026-W25</h1>" in html
     assert "<b>Focus:</b>" in html
     assert "<b>Volume:</b>" in html
     assert "<h2>Schedule</h2>" in html
@@ -297,7 +297,7 @@ def test_render_plan_note_html_structure():
 
 
 def test_render_assessment_note_html_stats_and_sections():
-    """render_assessment_note_html includes completion stats and session log."""
+    """render_assessment_note_html includes h1 title, completion stats, and session log."""
     workout = Workout(
         id="w1",
         date=date(2026, 6, 16),
@@ -321,7 +321,7 @@ def test_render_assessment_note_html_stats_and_sections():
         session_log=[(workout, {})],
         next_week_notes="Keep it up.",
     )
-    assert "<h1>" not in html
+    assert "<h1>Assessment - Week 2026-W25</h1>" in html
     assert "2/3" in html
     assert "<h2>Session Log</h2>" in html
     assert "<li>" in html

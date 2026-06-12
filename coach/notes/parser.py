@@ -378,9 +378,11 @@ def _para_html(content: str | None, placeholder: str) -> str:
 def render_workout_note_html(workout: Workout) -> str:
     """Render a Workout to HTML for Apple Notes display (no YAML front matter).
 
-    No H1 — Apple Notes already shows the note name as a prominent title above the
-    body, so repeating it as an H1 creates a visual duplicate.
+    The <h1> is the first line of the body — Apple Notes derives the note's title
+    from it. The note is created via two-step AppleScript (name first, body second)
+    so there is no duplication between the list title and the body heading.
     """
+    title_html = f"<h1>{_he(workout.note_title or workout.id)}</h1>" if workout.note_title else ""
     type_str = _he(workout.type.capitalize())
     if workout.subtype:
         type_str += f" / {_he(workout.subtype)}"
@@ -400,27 +402,28 @@ def render_workout_note_html(workout: Workout) -> str:
     )
     how_html = _para_html(workout.how_it_went, "Free text - RPE, PRs, how you felt.")
 
-    return "\n".join(
-        [
-            f"<p>{meta}</p>",
-            "<p>&nbsp;</p>",
-            "<h2>Planned</h2>",
-            planned_html,
-            "<p>&nbsp;</p>",
-            "<h2>Completed</h2>",
-            completed_html,
-            "<p>&nbsp;</p>",
-            "<h2>How It Went</h2>",
-            how_html,
-        ]
-    )
+    parts = []
+    if title_html:
+        parts.append(title_html)
+    parts += [
+        f"<p>{meta}</p>",
+        "<p>&nbsp;</p>",
+        "<h2>Planned</h2>",
+        planned_html,
+        "<p>&nbsp;</p>",
+        "<h2>Completed</h2>",
+        completed_html,
+        "<p>&nbsp;</p>",
+        "<h2>How It Went</h2>",
+        how_html,
+    ]
+    return "\n".join(parts)
 
 
 def render_plan_note_html(plan: WeeklyPlan) -> str:
     """Render a WeeklyPlan to HTML for Apple Notes display (no YAML front matter).
 
-    No H1 — Apple Notes already shows the note name ('Week YYYY-Www') as a
-    prominent title above the body. Training focus is shown in the metadata line.
+    The <h1> is the first line of the body — Apple Notes derives the note's name from it.
     """
     focus = _he(plan.training_focus.capitalize())
     volume = _he(plan.weekly_volume.capitalize())
@@ -439,6 +442,7 @@ def render_plan_note_html(plan: WeeklyPlan) -> str:
     gen_notes_html = _para_html(plan.generation_notes, "")
 
     parts = [
+        f"<h1>Week {_he(plan.week)}</h1>",
         f"<p><b>Focus:</b> {focus} &nbsp; <b>Volume:</b> {volume} &nbsp; <b>Generated:</b> {generated}</p>",
         "<p>&nbsp;</p>",
         "<h2>Schedule</h2>",
@@ -548,6 +552,7 @@ def render_assessment_note_html(
         pr_parts = ["<h2>Personal Records</h2>", f"<ul>{pr_items}</ul>"]
 
     parts = [
+        f"<h1>Assessment - Week {_he(week)}</h1>",
         (
             f"<p><b>Completion:</b> {sessions_completed}/{sessions_planned} ({completion_pct})"
             f" &nbsp; <b>Avg RPE:</b> {avg_rpe_str}"
