@@ -110,7 +110,7 @@ def test_workout_from_note_missing_optional_fields():
 
 
 def test_render_workout_note_html_structure():
-    """render_workout_note_html produces h1 title and h2 section headings."""
+    """render_workout_note_html produces metadata line and h2 section headings (no H1 — Apple Notes shows note name)."""
     workout = Workout(
         id="wrk-20260617-001",
         date=date(2026, 6, 17),
@@ -120,10 +120,12 @@ def test_render_workout_note_html_structure():
         subtype="upper",
         duration_planned=55,
         planned_content="Bench Press 4x5\nOHP 3x8",
-        note_title="2026-06-17 Strength — Upper Body Push",
+        note_title="2026-06-17 Strength - Upper Body Push",
     )
     html = render_workout_note_html(workout)
-    assert "<h1>2026-06-17 Strength — Upper Body Push</h1>" in html
+    assert "<h1>" not in html
+    assert "<b>Type:</b>" in html
+    assert "<b>Duration:</b>" in html
     assert "<h2>Planned</h2>" in html
     assert "<h2>Completed</h2>" in html
     assert "<h2>How It Went</h2>" in html
@@ -179,7 +181,7 @@ def test_render_workout_note_html_escapes_special_chars():
 
 
 def test_render_plan_note_html_structure():
-    """render_plan_note_html produces h1 title and bulleted schedule."""
+    """render_plan_note_html produces metadata line and bulleted schedule (no H1 — Apple Notes shows note name)."""
     from datetime import date as d
 
     from coach.models.plan import WeeklyPlan
@@ -192,7 +194,7 @@ def test_render_plan_note_html_structure():
             status="planned",
             source="generated",
             duration_planned=55,
-            note_title="2026-06-16 Strength — Upper Body",
+            note_title="2026-06-16 Strength - Upper Body",
         ),
         Workout(
             id="w2",
@@ -201,7 +203,7 @@ def test_render_plan_note_html_structure():
             status="planned",
             source="generated",
             duration_planned=45,
-            note_title="2026-06-18 Cardio — Zone 2",
+            note_title="2026-06-18 Cardio - Zone 2",
         ),
     ]
     plan = WeeklyPlan(
@@ -213,7 +215,9 @@ def test_render_plan_note_html_structure():
         generation_notes="Balanced week.",
     )
     html = render_plan_note_html(plan)
-    assert "<h1>Week 2026-W25 — Strength</h1>" in html
+    assert "<h1>" not in html
+    assert "<b>Focus:</b>" in html
+    assert "<b>Volume:</b>" in html
     assert "<h2>Schedule</h2>" in html
     assert "<ul>" in html
     assert "<li>" in html
@@ -247,7 +251,7 @@ def test_render_assessment_note_html_stats_and_sections():
         session_log=[(workout, {})],
         next_week_notes="Keep it up.",
     )
-    assert "<h1>Assessment — Week 2026-W25</h1>" in html
+    assert "<h1>Assessment - Week 2026-W25</h1>" in html
     assert "2/3" in html
     assert "<h2>Session Log</h2>" in html
     assert "<li>" in html

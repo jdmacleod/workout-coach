@@ -212,7 +212,7 @@ def test_plan_overwrite_updates_plan_note_as_html(tmp_path):
     # Plan note should be HTML (contains h1 or h2 marker after strip)
     plan_title = next(n for n in plan_notes if "W23" in n)
     body = mock_client._store[(FOLDER_PLANS, plan_title)]
-    assert "<h1>" in body or "## Schedule" in body  # raw stored body is HTML
+    assert "<h2>Schedule</h2>" in body  # raw stored body is HTML
 
 
 def test_plan_next_week_notes_injected_from_prior_assessment(tmp_path):

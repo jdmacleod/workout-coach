@@ -287,9 +287,11 @@ def _para_html(content: str | None, placeholder: str) -> str:
 
 
 def render_workout_note_html(workout: Workout) -> str:
-    """Render a Workout to HTML for Apple Notes display (no YAML front matter)."""
-    title = _he(workout.note_title or f"{workout.date.isoformat()} {workout.type.capitalize()}")
+    """Render a Workout to HTML for Apple Notes display (no YAML front matter).
 
+    No H1 — Apple Notes already shows the note name as a prominent title above the
+    body, so repeating it as an H1 creates a visual duplicate.
+    """
     type_str = _he(workout.type.capitalize())
     if workout.subtype:
         type_str += f" / {_he(workout.subtype)}"
@@ -307,16 +309,18 @@ def render_workout_note_html(workout: Workout) -> str:
         workout.completed_content,
         "Fill in after the workout. Free text or match the planned format.",
     )
-    how_html = _para_html(workout.how_it_went, "Free text — RPE, PRs, how you felt.")
+    how_html = _para_html(workout.how_it_went, "Free text - RPE, PRs, how you felt.")
 
     return "\n".join(
         [
-            f"<h1>{title}</h1>",
             f"<p>{meta}</p>",
+            "<p>&nbsp;</p>",
             "<h2>Planned</h2>",
             planned_html,
+            "<p>&nbsp;</p>",
             "<h2>Completed</h2>",
             completed_html,
+            "<p>&nbsp;</p>",
             "<h2>How It Went</h2>",
             how_html,
         ]
@@ -324,17 +328,21 @@ def render_workout_note_html(workout: Workout) -> str:
 
 
 def render_plan_note_html(plan: WeeklyPlan) -> str:
-    """Render a WeeklyPlan to HTML for Apple Notes display (no YAML front matter)."""
+    """Render a WeeklyPlan to HTML for Apple Notes display (no YAML front matter).
+
+    No H1 — Apple Notes already shows the note name ('Week YYYY-Www') as a
+    prominent title above the body. Training focus is shown in the metadata line.
+    """
     focus = _he(plan.training_focus.capitalize())
     volume = _he(plan.weekly_volume.capitalize())
     generated = _he(plan.generated.isoformat())
 
     items = []
     for w in plan.workouts:
-        day = _he(w.date.strftime("%a")) if w.date else "—"
+        day = _he(w.date.strftime("%a")) if w.date else "-"
         title_text = _he(w.note_title or f"{w.type.capitalize()} session")
-        dur = f" · {w.duration_planned}&nbsp;min" if w.duration_planned else ""
-        items.append(f"<li><b>{day}</b> — {title_text}{dur}</li>")
+        dur = f" - {w.duration_planned}&nbsp;min" if w.duration_planned else ""
+        items.append(f"<li><b>{day}</b> - {title_text}{dur}</li>")
     schedule_html = (
         f"<ul>{''.join(items)}</ul>" if items else "<p><i>No sessions scheduled.</i></p>"
     )
@@ -342,13 +350,13 @@ def render_plan_note_html(plan: WeeklyPlan) -> str:
     gen_notes_html = _para_html(plan.generation_notes, "")
 
     parts = [
-        f"<h1>Week {_he(plan.week)} — {focus}</h1>",
-        f"<p><b>Volume:</b> {volume} &nbsp; <b>Generated:</b> {generated}</p>",
+        f"<p><b>Focus:</b> {focus} &nbsp; <b>Volume:</b> {volume} &nbsp; <b>Generated:</b> {generated}</p>",
+        "<p>&nbsp;</p>",
         "<h2>Schedule</h2>",
         schedule_html,
     ]
     if plan.generation_notes:
-        parts += ["<h2>Generation Notes</h2>", gen_notes_html]
+        parts += ["<p>&nbsp;</p>", "<h2>Generation Notes</h2>", gen_notes_html]
 
     return "\n".join(parts)
 
@@ -427,17 +435,17 @@ def render_assessment_note_html(
     next_week_notes: str,
 ) -> str:
     """Render the full assessment note as HTML for Apple Notes display."""
-    avg_rpe_str = f"{avg_rpe:.1f}" if avg_rpe is not None else "—"
+    avg_rpe_str = f"{avg_rpe:.1f}" if avg_rpe is not None else "-"
     completion_pct = f"{completion_rate:.0%}"
 
     session_items = []
     for w, _ in session_log:
         label = _he(w.note_title or w.id)
         status = _he(w.status)
-        rpe_part = f" · RPE {w.rpe:.1f}" if w.rpe else ""
-        dur_part = f" · {w.duration_actual}&nbsp;min" if w.duration_actual else ""
+        rpe_part = f" - RPE {w.rpe:.1f}" if w.rpe else ""
+        dur_part = f" - {w.duration_actual}&nbsp;min" if w.duration_actual else ""
         day = _he(w.date.strftime("%a %b %-d"))
-        session_items.append(f"<li><b>{day}</b> — {label} · {status}{rpe_part}{dur_part}</li>")
+        session_items.append(f"<li><b>{day}</b> - {label} - {status}{rpe_part}{dur_part}</li>")
 
     session_html = (
         f"<ul>{''.join(session_items)}</ul>" if session_items else "<p><i>No sessions.</i></p>"
@@ -451,7 +459,7 @@ def render_assessment_note_html(
         pr_parts = ["<h2>Personal Records</h2>", f"<ul>{pr_items}</ul>"]
 
     parts = [
-        f"<h1>Assessment — Week {_he(week)}</h1>",
+        f"<h1>Assessment - Week {_he(week)}</h1>",
         (
             f"<p><b>Completion:</b> {sessions_completed}/{sessions_planned} ({completion_pct})"
             f" &nbsp; <b>Avg RPE:</b> {avg_rpe_str}"

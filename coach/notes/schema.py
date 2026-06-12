@@ -24,7 +24,7 @@ def workout_note_title(date_str: str, workout_type: str, subtitle: str) -> str:
     subtitle: e.g. "Upper Body"
     """
     type_cap = workout_type.capitalize()
-    return f"{date_str} {type_cap} — {subtitle}"
+    return f"{date_str} {type_cap} - {subtitle}"
 
 
 def plan_note_title(week: str) -> str:
