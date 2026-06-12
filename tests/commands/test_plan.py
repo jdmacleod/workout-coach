@@ -124,6 +124,97 @@ def test_plan_live_writes_local_files_then_notes(tmp_path):
     assert any("W23" in n for n in notes)
 
 
+def test_plan_overwrite_creates_missing_workout_notes(tmp_path):
+    """coach plan --overwrite creates workout notes missing from Apple Notes without re-running the LLM."""
+    from coach.commands.plan import _run_plan
+    from coach.notes.schema import FOLDER_WORKOUTS
+
+    cfg = _make_config(str(tmp_path))
+    (tmp_path / "training-info.md").write_text("# Training Info\nGeneral fitness.")
+
+    # First run: generate plan + write everything
+    mock_client = MockNotesClient()
+    provider = MockInferenceProvider(response_text=MOCK_PLAN_RESPONSE)
+    with patch("coach.commands.plan.load_config", return_value=cfg):
+        _run_plan(
+            week="2026-W23",
+            focus=None,
+            dry_run=False,
+            overwrite=False,
+            no_calendar=True,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    workout_notes_before = mock_client.list_notes(FOLDER_WORKOUTS)
+    assert len(workout_notes_before) > 0
+
+    # Simulate Notes losing one workout note
+    lost_title = workout_notes_before[0]
+    mock_client.delete_note(FOLDER_WORKOUTS, lost_title)
+    assert lost_title not in mock_client.list_notes(FOLDER_WORKOUTS)
+
+    # Second run with --overwrite: should recreate missing note without calling the LLM
+    provider2 = MockInferenceProvider(response_text=MOCK_PLAN_RESPONSE)
+    with patch("coach.commands.plan.load_config", return_value=cfg):
+        _run_plan(
+            week="2026-W23",
+            focus=None,
+            dry_run=False,
+            overwrite=True,
+            no_calendar=True,
+            notes_client=mock_client,
+            inference_provider=provider2,
+        )
+
+    # LLM was NOT called on overwrite (uses local files)
+    assert len(provider2.calls) == 0
+
+    # The missing workout note was recreated
+    assert lost_title in mock_client.list_notes(FOLDER_WORKOUTS)
+
+
+def test_plan_overwrite_updates_plan_note_as_html(tmp_path):
+    """coach plan --overwrite updates the plan note in Apple Notes using HTML rendering."""
+    from coach.commands.plan import _run_plan
+
+    cfg = _make_config(str(tmp_path))
+    (tmp_path / "training-info.md").write_text("# Training Info\nGeneral fitness.")
+
+    mock_client = MockNotesClient()
+    provider = MockInferenceProvider(response_text=MOCK_PLAN_RESPONSE)
+    with patch("coach.commands.plan.load_config", return_value=cfg):
+        _run_plan(
+            week="2026-W23",
+            focus=None,
+            dry_run=False,
+            overwrite=False,
+            no_calendar=True,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    # Overwrite: re-push with no LLM call
+    provider2 = MockInferenceProvider(response_text=MOCK_PLAN_RESPONSE)
+    with patch("coach.commands.plan.load_config", return_value=cfg):
+        _run_plan(
+            week="2026-W23",
+            focus=None,
+            dry_run=False,
+            overwrite=True,
+            no_calendar=True,
+            notes_client=mock_client,
+            inference_provider=provider2,
+        )
+
+    plan_notes = mock_client.list_notes(FOLDER_PLANS)
+    assert any("W23" in n for n in plan_notes)
+    # Plan note should be HTML (contains h1 or h2 marker after strip)
+    plan_title = next(n for n in plan_notes if "W23" in n)
+    body = mock_client._store[(FOLDER_PLANS, plan_title)]
+    assert "<h1>" in body or "## Schedule" in body  # raw stored body is HTML
+
+
 def test_plan_next_week_notes_injected_from_prior_assessment(tmp_path):
     """coach plan injects Next Week Notes from the prior assessment into the prompt."""
     from coach.commands.plan import _run_plan

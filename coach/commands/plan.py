@@ -33,10 +33,13 @@ from coach.models.workout import Workout
 from coach.notes.client import NotesClient
 from coach.notes.exceptions import NotesClientError
 from coach.notes.parser import (
+    parse_front_matter,
+    parse_sections,
     render_plan_note,
     render_plan_note_html,
     render_workout_note,
     render_workout_note_html,
+    workout_from_note,
 )
 from coach.notes.schema import (
     FOLDER_PLANS,
@@ -379,15 +382,70 @@ def _infer_with_retry(
 def _push_plan_to_notes(
     cfg: Config, plan_path: Path, week: str, notes_client: NotesClient | None
 ) -> None:
-    """Re-push an existing local plan file to Apple Notes."""
+    """Re-push an existing local plan to Apple Notes as HTML.
+
+    Reads plan metadata from the local plan file's front matter and loads
+    workout objects from local workout files. Creates any missing Notes
+    folders and notes; updates existing ones. Does not call the LLM.
+    """
     client = notes_client or NotesClient(account=cfg.notes.account, root_folder=cfg.notes.folder)
     content = plan_path.read_text()
+    fm = parse_front_matter(content)
+    sections = parse_sections(content)
+
+    # Load workouts from local files for the week (source of truth)
+    workouts_dir = resolve_data_path(cfg, "workouts_dir")
+    workouts: list[Workout] = []
+    if workouts_dir.exists():
+        year_str, week_num_str = week.split("-W")
+        year, wnum = int(year_str), int(week_num_str)
+        jan4 = datetime.date(year, 1, 4)
+        monday = jan4 - datetime.timedelta(days=jan4.weekday()) + datetime.timedelta(weeks=wnum - 1)
+        sunday = monday + datetime.timedelta(days=6)
+        for path in sorted(workouts_dir.glob("*.md")):
+            try:
+                w = workout_from_note(path.read_text(), path.stem)
+                if monday <= w.date <= sunday:
+                    workouts.append(w)
+            except Exception:
+                continue
+
+    # Reconstruct WeeklyPlan for HTML rendering
+    generated_str = fm.get("generated") or datetime.date.today().isoformat()
+    try:
+        generated = datetime.date.fromisoformat(generated_str)
+    except ValueError:
+        generated = datetime.date.today()
+
+    plan = WeeklyPlan(
+        week=fm.get("week") or week,
+        generated=generated,
+        training_focus=fm.get("training_focus") or "general",
+        weekly_volume=fm.get("weekly_volume") or "moderate",
+        workouts=workouts,
+        status=fm.get("status") or "active",
+        generation_notes=sections.get("Generation Notes") or None,
+    )
+
+    # Push workout notes: create any that are missing, update existing ones
+    client.ensure_folder(FOLDER_WORKOUTS)
+    for w in workouts:
+        if not w.note_title or w.type == "rest":
+            continue
+        note_html = render_workout_note_html(w)
+        if client.note_exists(FOLDER_WORKOUTS, w.note_title):
+            client.update_note(FOLDER_WORKOUTS, w.note_title, note_html)
+        else:
+            client.create_note(FOLDER_WORKOUTS, w.note_title, note_html)
+
+    # Push plan note: create if missing, update if existing
     plan_title = plan_note_title(week)
     client.ensure_folder(FOLDER_PLANS)
+    plan_html = render_plan_note_html(plan)
     if client.note_exists(FOLDER_PLANS, plan_title):
-        client.update_note(FOLDER_PLANS, plan_title, content)
+        client.update_note(FOLDER_PLANS, plan_title, plan_html)
     else:
-        client.create_note(FOLDER_PLANS, plan_title, content)
+        client.create_note(FOLDER_PLANS, plan_title, plan_html)
 
 
 def _print_plan_table(plan: WeeklyPlan) -> None:
