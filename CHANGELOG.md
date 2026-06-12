@@ -2,6 +2,17 @@
 
 All notable changes to Exercise Coach are documented here.
 
+## [0.4.0] — 2026-06-12
+
+### Added
+
+- **Clickable note-to-note links in plan note** — workout titles in the weekly schedule are now `applenotes://` hyperlinks that open the corresponding workout note directly. Numeric IDs always work; stable iCloud UUIDs are used when Full Disk Access is granted to Terminal. Configurable via `plan_note_links` in `[notes]` (default `true`); the `coach setup` questionnaire also sets this.
+
+### Fixed
+
+- **Workout section bullet formatting** — items under `Main Lifts:` and `Accessories:` are now consistently formatted as list entries. Previously the LLM would bullet only the first item and leave the rest as plain text.
+- **Notes: line not bulleted** — the trailing `Notes:` line (coaching cues) after the Accessories section is now rendered as a plain line, not a list entry.
+
 ## [0.1.0] — 2026-06-10
 
 Initial release of Exercise Coach v0.1 — an Apple Notes-based macOS fitness coaching CLI.
