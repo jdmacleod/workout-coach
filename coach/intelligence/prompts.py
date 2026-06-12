@@ -48,6 +48,22 @@ Injury notes: {profile_injury_notes}
 - At least 1 full rest day per week
 - Match weekly volume to recent history (avoid >10% load increase)
 
+## planned_content Format (strength sessions)
+Use this exact structure — headings on their own lines, one exercise per bullet:
+
+Warm-up:
+- exercise
+- exercise
+Main Lifts:
+- Exercise: NxN @ load
+- Exercise: NxN
+Accessories:
+- Exercise: NxN
+- Exercise: NxN
+Notes: rest periods and cues here
+
+Rules: heading lines end with ':' and have no content after the colon. Use 'x' for sets/reps (3x8, 4x5). Cardio/HIIT/mobility: adapt headings (e.g. Warm-up:, Main Set:, Cool-down:).
+
 ## Response Schema
 {plan_schema}
 """.strip()
@@ -63,7 +79,7 @@ PLAN_SCHEMA = """{
       "subtype": "string",
       "duration_minutes": 0,
       "title": "concise subtitle only — no type word, no date. BAD: 'Strength Upper Body', GOOD: 'Upper Body Push'. BAD: 'Cardio Zone 2', GOOD: 'Zone 2 Run'.",
-      "planned_content": "Use section headings ending in ':' (e.g. 'Warm-up:', 'Main Lifts:', 'Accessories:') followed by '- item' lines. Each exercise on its own line. Use 'x' for sets/reps (e.g. '4x5', '3x8'). No comma-separated activities within a single bullet.",
+      "planned_content": "string",
       "rationale": "string"
     }
   ]

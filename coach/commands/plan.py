@@ -90,6 +90,45 @@ def run(
         raise typer.Exit(code=1)
 
 
+_STRENGTH_HEADINGS = ("Warm-up", "Main Lifts", "Accessories")
+
+
+def _normalize_planned_content(content: str, wtype: str) -> str:
+    """Split inline 'Heading: item1, item2' lines into proper heading + bullets.
+
+    The LLM reliably uses bullet lists for Main Lifts/Accessories but often
+    collapses Warm-up (and occasionally other headings) into a single line:
+      Warm-up: goblet squat, hip circles, glute bridges
+    This normalises those lines to:
+      Warm-up:
+      - goblet squat
+      - hip circles
+      - glute bridges
+    Only applied to strength workouts and only for the known section headings.
+    """
+    if wtype not in ("strength", "hiit"):
+        return content
+    lines = content.splitlines()
+    result: list[str] = []
+    for ln in lines:
+        stripped = ln.strip()
+        split = False
+        for heading in _STRENGTH_HEADINGS:
+            prefix = heading + ": "
+            if stripped.startswith(prefix) and not stripped.endswith(":"):
+                result.append(heading + ":")
+                items_text = stripped[len(prefix) :]
+                for item in items_text.split(","):
+                    item = item.strip().rstrip(".")
+                    if item:
+                        result.append(f"- {item}")
+                split = True
+                break
+        if not split:
+            result.append(ln)
+    return "\n".join(result)
+
+
 def _resolve_target_week(week_str: str | None) -> str:
     """Return YYYY-Www for next Monday's ISO week (or the provided string)."""
     if week_str:
@@ -308,7 +347,11 @@ def _run_plan(
             source="generated",
             subtype=session.get("subtype"),
             duration_planned=session.get("duration_minutes"),
-            planned_content=session.get("planned_content") or session.get("rationale"),
+            planned_content=_normalize_planned_content(
+                session.get("planned_content") or session.get("rationale") or "",
+                wtype,
+            )
+            or None,
             note_title=note_title,
         )
         workouts.append(w)
