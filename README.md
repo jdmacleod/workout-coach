@@ -1,5 +1,10 @@
 # Exercise Coach
 
+[![CI](https://github.com/jdmacleod/workout-coach/actions/workflows/ci.yml/badge.svg)](https://github.com/jdmacleod/workout-coach/actions/workflows/ci.yml)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](https://www.apple.com/macos/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 An Apple Notes-based fitness coaching CLI for macOS. Generates weekly workout plans,
 logs sessions, and produces weekly assessments — all using a configurable LLM running
 on-device or via API. Plans and workouts sync to your iPhone automatically through iCloud.
