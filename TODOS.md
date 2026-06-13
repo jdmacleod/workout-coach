@@ -108,3 +108,18 @@ Items deferred from v0.1. Each item includes context, motivation, and a starting
 **Start:** `03-cli-commands.md` assess section edge cases; then `coach/commands/assess.py`.
 
 **Depends on:** Nothing.
+
+---
+
+## T8 — Eval harness for LLM constraint validation
+**Priority:** P3 | **Effort:** M (human: ~1 day / CC: ~20min)
+
+**What:** An automated eval (or manual checklist) that runs `coach plan --dry-run` against a real LLM and asserts the generated plan respects equipment and duration constraints. For example: given equipment=["barbell","pull-up bar"] and max_session_duration=30, verify no session references a bench and no session exceeds 30 min.
+
+**Why:** The unit tests (T7) verify that equipment/duration text appears in the prompt and that the correction pass fires. They don't verify that the LLM actually produces valid plans. If the prompt is revised and constraints stop being respected, there's no automated catch.
+
+**Context:** Requires a live LLM call (cannot be mocked for the quality signal). Could be a pytest integration test (marked with `@pytest.mark.integration`) that calls `_run_plan` with a MockInferenceProvider that returns known-bad responses, verifying the correction pass fires and fixes them. True end-to-end eval requires a real provider and is manual for now.
+
+**Start:** `tests/commands/test_plan.py` — add integration-marked tests using a "violating provider" mock that returns a plan with bench press. Verify the correction pass fires and the final plan doesn't contain bench press.
+
+**Depends on:** T4 (correction pass) must ship first.

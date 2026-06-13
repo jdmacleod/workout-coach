@@ -62,6 +62,8 @@ class ProfileConfig:
     fitness_days_per_week: int = 4
     primary_goal: str = "general fitness"
     injury_notes: str = ""
+    available_equipment: list[str] = field(default_factory=list)
+    max_session_duration_minutes: int | None = None
 
 
 @dataclass

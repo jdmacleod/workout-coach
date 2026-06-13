@@ -47,7 +47,7 @@ Injury notes: {profile_injury_notes}
 - No high-intensity session the day after a session with recovery_cost >= 3
 - At least 1 full rest day per week
 - Match weekly volume to recent history (avoid >10% load increase)
-
+{equipment_constraint}{duration_constraint}
 ## planned_content Format (strength sessions)
 Use this exact structure — headings on their own lines, one exercise per bullet:
 
@@ -61,6 +61,12 @@ Accessories:
 - Exercise: NxN
 - Exercise: NxN
 Notes: rest periods and cues here
+
+Time budget: scale exercise count to fit the duration_minutes exactly.
+- 20–30 min → 2–3 warm-up items, 1–2 main lifts, 2–3 accessories
+- 31–45 min → 2–3 warm-up items, 2–3 main lifts, 3–4 accessories
+- 46–60 min → 3 warm-up items, 3 main lifts, 4–5 accessories
+Each main lift takes ~5–6 min (sets + rest); each accessory ~3 min. Do not exceed the budget.
 
 Rules: heading lines end with ':' and have no content after the colon. Use 'x' for sets/reps (3x8, 4x5). Cardio/HIIT/mobility: adapt headings (e.g. Warm-up:, Main Set:, Cool-down:).
 
@@ -224,6 +230,27 @@ NEXT_WEEK_NOTES_USER = """
 {observations}
 
 Write the Next Week Notes paragraph now.
+""".strip()
+
+PLAN_CORRECTION_SYSTEM = """
+You are a personal fitness coach correcting a workout plan for constraint violations.
+Respond only with a valid JSON object matching the original plan schema.
+Do not include any explanation, preamble, or markdown formatting.
+""".strip()
+
+PLAN_CORRECTION_USER = """
+The workout plan below may violate the following constraints. Review each session and
+make the minimum changes needed to fix any violations. Return the full corrected plan
+as JSON. If a session already satisfies all constraints, leave it unchanged.
+
+## Constraints to enforce
+{constraints}
+
+## Current Plan (JSON)
+{plan_json}
+
+## Response Schema
+{plan_schema}
 """.strip()
 
 JSON_PARSE_CORRECTION = """

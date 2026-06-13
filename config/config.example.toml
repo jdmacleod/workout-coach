@@ -43,6 +43,15 @@ fitness_days_per_week = 4
 primary_goal          = "general fitness"   # strength | endurance | general fitness | weight loss | sport-specific
 injury_notes          = ""                  # free text; empty means none
 
+# Equipment you have access to. The planner uses this to restrict exercise selection.
+# Leave empty ([]) to rely on training-info.md alone.
+available_equipment   = ["barbell", "bumper plates", "pull-up bar", "rings"]
+
+# Hard cap per session in minutes. The LLM is instructed to respect this limit, and
+# a post-generation warning is printed if any session exceeds it. Remove or set to 0
+# to disable the cap.
+max_session_duration_minutes = 45
+
 # ── Apple Notes ───────────────────────────────────────────────────────────────
 
 [notes]

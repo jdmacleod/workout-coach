@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import json
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 import typer
 from rich.console import Console
@@ -21,6 +21,8 @@ from coach.config import (
 from coach.intelligence.exceptions import InferenceError, InferenceParseError
 from coach.intelligence.prompts import (
     JSON_PARSE_CORRECTION,
+    PLAN_CORRECTION_SYSTEM,
+    PLAN_CORRECTION_USER,
     PLAN_GENERATION_SYSTEM,
     PLAN_GENERATION_USER,
     PLAN_SCHEMA,
@@ -308,6 +310,22 @@ def _run_plan(
     days_of_week = [(monday + datetime.timedelta(days=i)).strftime("%a") for i in range(7)]
     available_days = ", ".join(days_of_week)
 
+    equipment = cfg.profile.available_equipment
+    max_duration = cfg.profile.max_session_duration_minutes
+
+    equipment_constraint = (
+        f"- Equipment available: {', '.join(equipment)}. "
+        "NEVER suggest exercises requiring equipment not on this list.\n"
+        if equipment
+        else ""
+    )
+    duration_constraint = (
+        f"- Sessions MUST NOT exceed {max_duration} minutes. "
+        "Plan the number of exercises to fit within this limit.\n"
+        if max_duration
+        else ""
+    )
+
     user_prompt = PLAN_GENERATION_USER.format(
         config_note=f"Name: {cfg.user.name}\nTimezone: {cfg.user.timezone}",
         profile_days_per_week=cfg.profile.fitness_days_per_week,
@@ -320,6 +338,8 @@ def _run_plan(
         if no_calendar or not cfg.calendar.enabled
         else "(loading...)",
         available_days=available_days,
+        equipment_constraint=equipment_constraint,
+        duration_constraint=duration_constraint,
         plan_schema=PLAN_SCHEMA,
     )
 
@@ -339,6 +359,10 @@ def _run_plan(
         raise InferenceParseError(
             f"Failed to parse plan JSON: {e}\nResponse: {raw_response[:200]}"
         ) from e
+
+    # Correction pass: ask the LLM to self-audit against equipment/duration constraints
+    with console.status("Checking constraints...", spinner="dots"):
+        plan_data = _correct_plan_if_needed(plan_data, cfg, provider)
 
     # Build plan objects
     workouts: list[Workout] = []
@@ -378,6 +402,15 @@ def _run_plan(
             note_title=note_title,
         )
         workouts.append(w)
+
+    # Python duration check (deterministic, runs after correction pass)
+    if max_duration:
+        for w in workouts:
+            if w.type != "rest" and w.duration_planned and w.duration_planned > max_duration:
+                console.print(
+                    f"[yellow]Warning: {w.date.strftime('%a')} session "
+                    f"({w.duration_planned} min) exceeds your {max_duration}-min limit.[/yellow]"
+                )
 
     plan = WeeklyPlan(
         week=target_week,
@@ -435,6 +468,53 @@ def _run_plan(
     console.print("[green]Apple Notes updated.[/green]")
 
     _print_plan_table(plan)
+
+
+def _correct_plan_if_needed(
+    plan_data: dict[str, Any],
+    cfg: Config,
+    provider: InferenceProvider,
+) -> dict[str, Any]:
+    """Ask the LLM to self-audit the plan against equipment and duration constraints.
+
+    Only fires when at least one structured constraint is configured. Falls back to
+    the original plan if the correction call fails or returns unparseable JSON.
+    """
+    equipment = cfg.profile.available_equipment
+    max_duration = cfg.profile.max_session_duration_minutes
+
+    if not equipment and not max_duration:
+        return plan_data
+
+    constraints: list[str] = []
+    if equipment:
+        constraints.append(
+            f"Equipment available: {', '.join(equipment)}. "
+            "Replace any exercise requiring equipment not on this list with an equivalent "
+            "exercise that uses only the available equipment."
+        )
+    if max_duration:
+        constraints.append(
+            f"Each session must not exceed {max_duration} minutes. "
+            "Reduce exercise count if needed to fit the time budget."
+        )
+
+    correction_prompt = PLAN_CORRECTION_USER.format(
+        constraints="\n".join(f"- {c}" for c in constraints),
+        plan_json=json.dumps(plan_data, indent=2),
+        plan_schema=PLAN_SCHEMA,
+    )
+
+    try:
+        corrected_raw = _infer_with_retry(
+            provider, PLAN_CORRECTION_SYSTEM, correction_prompt, PLAN_SCHEMA, PLAN_SCHEMA_DICT
+        )
+        return cast(dict[str, Any], json.loads(corrected_raw))
+    except (InferenceError, json.JSONDecodeError) as e:
+        console.print(
+            f"[yellow]Warning: constraint correction failed ({e}). Using original plan.[/yellow]"
+        )
+        return plan_data
 
 
 def _infer_with_retry(
