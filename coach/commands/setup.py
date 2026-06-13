@@ -99,6 +99,22 @@ def _run_questionnaire() -> None:
         default="general fitness",
     )
     injuries = typer.prompt("Any injuries or limitations? (leave blank if none)", default="")
+
+    equipment_raw = typer.prompt(
+        "Equipment available, comma-separated (e.g. barbell, pull-up bar, rings). "
+        "Leave blank to rely on training-info.md alone",
+        default="",
+    )
+    equipment = (
+        [e.strip() for e in equipment_raw.split(",") if e.strip()] if equipment_raw.strip() else []
+    )
+
+    duration_raw = typer.prompt(
+        "Max session duration in minutes (leave blank or 0 for no hard limit)",
+        default="0",
+    )
+    max_duration = int(duration_raw) if duration_raw.strip().isdigit() else 0
+
     links_answer = typer.prompt(
         "Embed clickable links in the plan note? "
         "(numeric links always work; stable links need Full Disk Access for Terminal)",
@@ -107,45 +123,53 @@ def _run_questionnaire() -> None:
     plan_note_links = links_answer.lower().strip() in ("y", "yes", "true", "1")
 
     _write_config_values(
-        name=name, days=days, goal=goal, injuries=injuries, plan_note_links=plan_note_links
+        name=name,
+        days=days,
+        goal=goal,
+        injuries=injuries,
+        equipment=equipment,
+        max_duration=max_duration,
+        plan_note_links=plan_note_links,
     )
     console.print("[green]Config updated.[/green]")
 
 
 def _write_config_values(
-    *, name: str, days: str, goal: str, injuries: str, plan_note_links: bool = True
+    *,
+    name: str,
+    days: str,
+    goal: str,
+    injuries: str,
+    equipment: list[str],
+    max_duration: int,
+    plan_note_links: bool = True,
 ) -> None:
     """Update key fields in config.toml."""
-    text = CONFIG_FILE.read_text()
-
-    def _set(text: str, key: str, value: str) -> str:
-        import re
-
-        pattern = rf"^({re.escape(key)}\s*=\s*).*$"
-        replacement = rf'\g<1>"{value}"'
-        new_text = re.sub(pattern, replacement, text, flags=re.MULTILINE)
-        return new_text
-
-    text = _set(text, "name", name)
-    text = _set(text, "primary_goal", goal)
-    text = _set(text, "injury_notes", injuries)
-
     import re
 
-    # fitness_days_per_week is an integer, no quotes
-    text = re.sub(
-        r"^(fitness_days_per_week\s*=\s*).*$",
-        rf"\g<1>{days}",
-        text,
-        flags=re.MULTILINE,
-    )
-    # plan_note_links is a boolean, no quotes
-    text = re.sub(
-        r"^(plan_note_links\s*=\s*).*$",
-        rf"\g<1>{'true' if plan_note_links else 'false'}",
-        text,
-        flags=re.MULTILINE,
-    )
+    text = CONFIG_FILE.read_text()
+
+    def _set_str(t: str, key: str, value: str) -> str:
+        pattern = rf"^({re.escape(key)}\s*=\s*).*$"
+        return re.sub(pattern, rf'\g<1>"{value}"', t, flags=re.MULTILINE)
+
+    def _set_raw(t: str, key: str, value: str) -> str:
+        pattern = rf"^({re.escape(key)}\s*=\s*).*$"
+        return re.sub(pattern, rf"\g<1>{value}", t, flags=re.MULTILINE)
+
+    text = _set_str(text, "name", name)
+    text = _set_str(text, "primary_goal", goal)
+    text = _set_str(text, "injury_notes", injuries)
+    text = _set_raw(text, "fitness_days_per_week", days)
+    text = _set_raw(text, "plan_note_links", "true" if plan_note_links else "false")
+
+    # available_equipment as a TOML inline array
+    toml_array = "[" + ", ".join(f'"{e}"' for e in equipment) + "]"
+    text = _set_raw(text, "available_equipment", toml_array)
+
+    # max_session_duration_minutes as an integer; 0 means no hard limit
+    text = _set_raw(text, "max_session_duration_minutes", str(max_duration))
+
     CONFIG_FILE.write_text(text)
 
 
