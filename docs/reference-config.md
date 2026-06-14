@@ -139,7 +139,7 @@ max_session_duration_minutes = 60
 | `primary_goal` | string | `strength`, `endurance`, `general fitness`, `weight loss`, or `sport-specific`. Sets the planning objective. |
 | `injury_notes` | string | Free text describing injuries or limitations. Injected into the planning prompt as constraints. Empty string means none. |
 | `available_equipment` | array | Equipment you have access to (e.g. `["barbell", "pull-up bar", "kettlebell"]`). Limits exercise selection and, on the Swift provider, activates pre-plan web search. Empty array = bodyweight only. |
-| `max_session_duration_minutes` | integer | Hard cap on session length in minutes. The planner keeps every session within this budget. `0` = no limit. |
+| `max_session_duration_minutes` | integer or null | Hard cap on session length in minutes. The planner keeps every session within this budget. `null` or omitting the key = no limit. |
 
 ---
 
