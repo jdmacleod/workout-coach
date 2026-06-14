@@ -30,7 +30,7 @@ jobs:
         run: uv run mypy coach/
 
       - name: Test
-        run: uv run pytest tests/ -m "not integration"
+        run: uv run pytest tests/ -m "not integration and not usability_live"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
