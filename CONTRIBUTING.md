@@ -24,6 +24,9 @@ uv run pytest tests/ -m "not integration"
 # Integration tests — requires Notes.app running and configured
 uv run pytest tests/ -m integration
 
+# Search smoke tests — hit live APIs; keyed providers skip when no key is configured
+uv run pytest tests/ -m search -v
+
 # All tests
 uv run pytest tests/
 ```

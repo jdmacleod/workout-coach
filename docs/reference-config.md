@@ -126,9 +126,11 @@ Written by `coach setup`. Values are injected into every planning and assessment
 
 ```toml
 [profile]
-fitness_days_per_week = 4
-primary_goal          = "general fitness"
-injury_notes          = ""
+fitness_days_per_week        = 4
+primary_goal                 = "general fitness"
+injury_notes                 = ""
+available_equipment          = ["barbell", "pull-up bar"]
+max_session_duration_minutes = 60
 ```
 
 | Key | Type | Description |
@@ -136,6 +138,8 @@ injury_notes          = ""
 | `fitness_days_per_week` | integer | How many days per week you currently train. Guides plan volume. |
 | `primary_goal` | string | `strength`, `endurance`, `general fitness`, `weight loss`, or `sport-specific`. Sets the planning objective. |
 | `injury_notes` | string | Free text describing injuries or limitations. Injected into the planning prompt as constraints. Empty string means none. |
+| `available_equipment` | array | Equipment you have access to (e.g. `["barbell", "pull-up bar", "kettlebell"]`). Limits exercise selection and, on the Swift provider, activates pre-plan web search. Empty array = bodyweight only. |
+| `max_session_duration_minutes` | integer | Hard cap on session length in minutes. The planner keeps every session within this budget. `0` = no limit. |
 
 ---
 
@@ -228,6 +232,33 @@ calendar_ids     = ["primary"]
 url  = ""   # Google Calendar private ICS URL
 file = ""   # Path to exported .ics file
 ```
+
+---
+
+## [search]
+
+Optional API keys for web search providers. Used by the Swift inference bridge during plan
+generation when `profile.available_equipment` is non-empty. Providers are tried in priority
+order; DuckDuckGo is always the free fallback.
+
+```toml
+[search]
+brave_search_api_key = ""
+exa_api_key          = ""
+tavily_api_key       = ""
+```
+
+| Key | Type | Provider | Description |
+|---|---|---|---|
+| `brave_search_api_key` | string | [Brave Search](https://api.search.brave.com/) | Priority 1. Best general fitness results. |
+| `exa_api_key` | string | [Exa](https://exa.ai/) | Priority 2. Semantic / AI-native search. |
+| `tavily_api_key` | string | [Tavily](https://tavily.com/) | Priority 3. AI-optimized RAG search. |
+
+Leave all keys blank to use DuckDuckGo only (free, no signup required). DuckDuckGo returns
+Wikipedia abstracts and is less effective for specific exercise queries.
+
+**Note:** Web search only activates on the `swift` provider when `available_equipment` is non-empty.
+All other providers ignore this section.
 
 ---
 

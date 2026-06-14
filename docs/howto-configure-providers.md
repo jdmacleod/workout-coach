@@ -48,6 +48,14 @@ Uses Apple's on-device Foundation Models framework. Private, fast, and free.
    make -C swift smoke
    ```
 
+4. **(Optional) Enable web search** — when `profile.available_equipment` is non-empty in
+   `config.toml`, the Swift provider automatically performs a web search phase before
+   generating your plan. Exercises are looked up using your configured equipment so the
+   model can suggest variations beyond its training data.
+
+   Add API keys to `[search]` in `config.toml` for better results (DuckDuckGo is the free
+   fallback). See [Configuration reference → [search]](reference-config.md#search).
+
 ---
 
 ## Option B: Anthropic API

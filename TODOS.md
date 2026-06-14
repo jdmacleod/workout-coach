@@ -122,4 +122,4 @@ Items deferred from v0.1. Each item includes context, motivation, and a starting
 
 **Start:** `tests/commands/test_plan.py` — add integration-marked tests using a "violating provider" mock that returns a plan with bench press. Verify the correction pass fires and the final plan doesn't contain bench press.
 
-**Depends on:** T4 (correction pass) must ship first.
+**Depends on:** Correction pass shipped in v0.4.1 — dependency met.

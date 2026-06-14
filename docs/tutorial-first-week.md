@@ -47,6 +47,8 @@ You'll be asked:
 - **Training days per week** — guides plan volume
 - **Primary goal** — `strength`, `endurance`, `general fitness`, etc.
 - **Injuries / limitations** — passed as constraints to the planner (leave blank if none)
+- **Available equipment** — e.g. `barbell, pull-up bar`; activates web search on the Swift provider and limits exercise selection to what you have
+- **Max session duration** — in minutes; the planner keeps sessions within this budget
 
 Setup also:
 - Creates `config/config.toml` from the example

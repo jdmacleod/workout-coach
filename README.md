@@ -57,8 +57,8 @@ uv run coach --help
 uv run coach setup
 ```
 
-Answers 4 questions (name, training days, goal, injuries), creates `config/config.toml`,
-and sets up Apple Notes folders.
+Answers 6 questions (name, training days, goal, injuries, available equipment, session
+duration), creates `config/config.toml`, and sets up Apple Notes folders.
 
 **2. Describe your training:**
 

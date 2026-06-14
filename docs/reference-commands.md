@@ -28,7 +28,7 @@ coach setup [OPTIONS]
 
 1. Copies `config/config.example.toml` → `config/config.toml` (if not present)
 2. Creates `data/workouts/`, `data/plans/`, `data/assessments/`
-3. Runs an interactive questionnaire to populate your name, training days, goal, and injuries
+3. Runs an interactive questionnaire: name, training days, goal, injuries, available equipment, session duration
 4. Shows a provider availability table for your macOS version
 5. Creates `Exercise Coach/Plans`, `Exercise Coach/Workouts`, `Exercise Coach/Assessments` folders in Apple Notes
 
@@ -65,6 +65,8 @@ coach plan [OPTIONS]
 - Reads `data/training-info.md` for your training profile (copies example if missing)
 - Loads the prior week's "Next Week Notes" from Apple Notes (carries coaching context forward)
 - Reads the last 4 weeks of local workout files to build a history summary
+- Enforces `available_equipment` and `max_session_duration_minutes` from your profile as hard constraints; runs a self-correction pass if the LLM violates them
+- On the Swift provider with `available_equipment` set, runs a web search phase before generating the plan (searches for equipment-specific exercises)
 - Calls the LLM once; retries once on JSON parse failure
 - Writes local files **first**, then Apple Notes (recovery: `--overwrite` re-pushes without re-calling LLM)
 

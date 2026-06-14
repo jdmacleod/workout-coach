@@ -2,6 +2,19 @@
 
 All notable changes to Exercise Coach are documented here.
 
+## [0.4.1] — 2026-06-13
+
+### Added
+
+- **Equipment and session duration in setup** — `coach setup` now asks for your available equipment (e.g. `barbell, pull-up bar`) and maximum session duration (in minutes). Both are written to `[profile]` in `config.toml` and carried forward as hard constraints for every plan.
+- **Plan constraint enforcement with self-correction pass** — `coach plan` now injects `available_equipment` and `max_session_duration_minutes` as explicit constraints into the planning prompt. If the LLM generates exercises requiring equipment you don't have, or sessions that exceed your time budget, a self-correction pass fires automatically before the plan is written.
+- **Web search for exercise research on the Swift provider** — when `available_equipment` is non-empty and the `swift` provider is active, `coach plan` runs a pre-plan web search phase. The on-device model uses a `WebSearchTool` to look up exercises and example workouts matching your exact equipment before generating the plan JSON. Providers tried in order: Brave Search → Exa → Tavily → DuckDuckGo (free fallback). Configure API keys in `[search]` in `config.toml`.
+
+### For contributors
+
+- New `search` pytest marker for external API smoke tests (`uv run pytest tests/ -m search -v`). Keyed providers (Brave, Exa, Tavily) skip automatically when no key is configured; DuckDuckGo always runs.
+- Fixed DuckDuckGo `no_redirect=1` parameter missing from both Swift and Python implementations.
+
 ## [0.4.0] — 2026-06-12
 
 ### Added
