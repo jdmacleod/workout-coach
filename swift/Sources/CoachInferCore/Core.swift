@@ -44,17 +44,42 @@ public struct Request: Decodable, Sendable {
     /// When present, the executable uses guided generation via DynamicGenerationSchema.
     /// When nil, the response is free-form text.
     public let schema: SchemaNode?
+    /// When true, a WebSearchTool research phase runs before schema-constrained plan generation.
+    public let enableSearch: Bool
+    /// Provider → API key pairs forwarded from config. When nil, only DuckDuckGo (no key) is tried.
+    public let searchApiKeys: [String: String]?
 
-    public init(system: String, user: String, maxTokens: Int, schema: SchemaNode? = nil) {
+    public init(
+        system: String,
+        user: String,
+        maxTokens: Int,
+        schema: SchemaNode? = nil,
+        enableSearch: Bool = false,
+        searchApiKeys: [String: String]? = nil
+    ) {
         self.system = system
         self.user = user
         self.maxTokens = maxTokens
         self.schema = schema
+        self.enableSearch = enableSearch
+        self.searchApiKeys = searchApiKeys
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        system = try c.decode(String.self, forKey: .system)
+        user = try c.decode(String.self, forKey: .user)
+        maxTokens = try c.decode(Int.self, forKey: .maxTokens)
+        schema = try c.decodeIfPresent(SchemaNode.self, forKey: .schema)
+        enableSearch = try c.decodeIfPresent(Bool.self, forKey: .enableSearch) ?? false
+        searchApiKeys = try c.decodeIfPresent([String: String].self, forKey: .searchApiKeys)
     }
 
     enum CodingKeys: String, CodingKey {
         case system, user, schema
         case maxTokens = "max_tokens"
+        case enableSearch = "enable_search"
+        case searchApiKeys = "search_api_keys"
     }
 }
 

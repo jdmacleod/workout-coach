@@ -95,6 +95,40 @@ final class RequestTests: XCTestCase {
         XCTAssertEqual(schema.min, 1)
         XCTAssertEqual(schema.max, 7)
     }
+
+    func testDecodeEnableSearchTrue() throws {
+        let json = #"{"system":"s","user":"u","max_tokens":256,"enable_search":true}"#.data(using: .utf8)!
+        let req = try JSONDecoder().decode(Request.self, from: json)
+        XCTAssertTrue(req.enableSearch)
+    }
+
+    func testDecodeEnableSearchAbsent() throws {
+        let json = #"{"system":"s","user":"u","max_tokens":256}"#.data(using: .utf8)!
+        let req = try JSONDecoder().decode(Request.self, from: json)
+        XCTAssertFalse(req.enableSearch, "enable_search should default to false when absent")
+    }
+
+    func testDecodeSearchApiKeys() throws {
+        let json = #"""
+        {
+          "system": "s",
+          "user": "u",
+          "max_tokens": 256,
+          "enable_search": true,
+          "search_api_keys": {
+            "brave_search_api_key": "test-key-brave",
+            "exa_api_key": "test-key-exa",
+            "tavily_api_key": "tvly-test-key"
+          }
+        }
+        """#.data(using: .utf8)!
+        let req = try JSONDecoder().decode(Request.self, from: json)
+        XCTAssertTrue(req.enableSearch)
+        let keys = try XCTUnwrap(req.searchApiKeys)
+        XCTAssertEqual(keys["brave_search_api_key"], "test-key-brave")
+        XCTAssertEqual(keys["exa_api_key"], "test-key-exa")
+        XCTAssertEqual(keys["tavily_api_key"], "tvly-test-key")
+    }
 }
 
 // MARK: - Response

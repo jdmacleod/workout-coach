@@ -52,6 +52,21 @@ available_equipment   = ["barbell", "bumper plates", "pull-up bar", "rings"]
 # to disable the cap.
 max_session_duration_minutes = 45
 
+# ── Web Search (optional — enhances exercise selection when using Swift provider) ──
+# When available_equipment is configured, the plan generator runs a research phase
+# where the on-device model can call web search to find exercises matching your
+# specific equipment. Providers are tried in order: Brave → Exa → Tavily → DuckDuckGo.
+# Configure one or more API keys below; any key left blank skips that provider.
+# DuckDuckGo requires no API key and is always the final fallback.
+
+[search]
+# Best results for fitness queries. Sign up at https://api.search.brave.com/
+brave_search_api_key = ""
+# Semantic/AI-native search. Sign up at https://exa.ai/
+exa_api_key          = ""
+# AI-native RAG search, designed for LLM applications. Sign up at https://tavily.com/
+tavily_api_key       = ""
+
 # ── Apple Notes ───────────────────────────────────────────────────────────────
 
 [notes]

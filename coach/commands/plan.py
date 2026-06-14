@@ -346,10 +346,18 @@ def _run_plan(
     if focus:
         user_prompt += f"\n\nOverride training focus: {focus}"
 
+    # Enable web search on the Swift provider when equipment constraints are configured
+    use_search = bool(cfg.profile.available_equipment) and provider.provider_name() == "swift"
+
     # Call inference (with one retry on parse error)
     with console.status("Thinking...", spinner="dots"):
         raw_response = _infer_with_retry(
-            provider, PLAN_GENERATION_SYSTEM, user_prompt, PLAN_SCHEMA, PLAN_SCHEMA_DICT
+            provider,
+            PLAN_GENERATION_SYSTEM,
+            user_prompt,
+            PLAN_SCHEMA,
+            PLAN_SCHEMA_DICT,
+            enable_search=use_search,
         )
 
     # Parse JSON response
@@ -523,9 +531,12 @@ def _infer_with_retry(
     user: str,
     schema: str,
     schema_dict: dict[str, Any] | None = None,
+    enable_search: bool = False,
 ) -> str:
     """Call inference with one retry on parse failure."""
-    req = InferenceRequest(system=system, user=user, max_tokens=2048, schema=schema_dict)
+    req = InferenceRequest(
+        system=system, user=user, max_tokens=2048, schema=schema_dict, enable_search=enable_search
+    )
     resp = provider.infer(req)
 
     text = extract_json_text(resp.text)

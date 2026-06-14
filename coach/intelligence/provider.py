@@ -15,6 +15,7 @@ class InferenceRequest:
     max_tokens: int = 1024
     temperature: float = 0.4
     schema: dict[str, Any] | None = field(default=None, compare=False)
+    enable_search: bool = False
 
 
 @dataclass

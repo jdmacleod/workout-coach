@@ -290,6 +290,57 @@ def test_python_duration_warning_when_exceeded(
     assert len(provider.calls) == 2
 
 
+def test_search_enabled_when_equipment_set_and_swift_provider(
+    tmp_path: pytest.MonkeyPatch,
+) -> None:
+    from coach.commands.plan import _run_plan
+
+    class SwiftNamedProvider(MockInferenceProvider):
+        def provider_name(self) -> str:
+            return "swift"
+
+    cfg = _make_config(str(tmp_path), available_equipment=["barbell", "rings"])
+    (tmp_path / "training-info.md").write_text("# Training Info\nGeneral fitness.")
+    provider = SwiftNamedProvider(response_text=MOCK_PLAN_RESPONSE)
+    mock_client = MockNotesClient()
+
+    with patch("coach.commands.plan.load_config", return_value=cfg):
+        _run_plan(
+            week="2026-W30",
+            focus=None,
+            dry_run=True,
+            overwrite=False,
+            no_calendar=True,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    # First call (initial generation) must have enable_search=True
+    assert provider.calls[0].enable_search is True
+
+
+def test_search_not_enabled_for_non_swift_provider(tmp_path: pytest.MonkeyPatch) -> None:
+    from coach.commands.plan import _run_plan
+
+    cfg = _make_config(str(tmp_path), available_equipment=["barbell", "rings"])
+    (tmp_path / "training-info.md").write_text("# Training Info\nGeneral fitness.")
+    provider = MockInferenceProvider(response_text=MOCK_PLAN_RESPONSE)  # provider_name() == "mock"
+    mock_client = MockNotesClient()
+
+    with patch("coach.commands.plan.load_config", return_value=cfg):
+        _run_plan(
+            week="2026-W30",
+            focus=None,
+            dry_run=True,
+            overwrite=False,
+            no_calendar=True,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    assert provider.calls[0].enable_search is False
+
+
 def test_rest_sessions_skip_duration_check(tmp_path: pytest.MonkeyPatch) -> None:
     from coach.commands.plan import _run_plan
 

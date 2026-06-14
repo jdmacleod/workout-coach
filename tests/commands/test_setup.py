@@ -6,8 +6,6 @@ import tomllib
 
 import pytest
 
-from coach.config import CONFIG_FILE
-
 
 def test_write_config_values_equipment_and_duration(tmp_path: pytest.MonkeyPatch) -> None:
     from unittest.mock import patch

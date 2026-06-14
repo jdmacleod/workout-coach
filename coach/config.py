@@ -112,6 +112,13 @@ class UserConfig:
 
 
 @dataclass
+class SearchConfig:
+    brave_search_api_key: str = ""
+    exa_api_key: str = ""
+    tavily_api_key: str = ""
+
+
+@dataclass
 class Config:
     user: UserConfig = field(default_factory=UserConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
@@ -119,6 +126,7 @@ class Config:
     notes: NotesConfig = field(default_factory=NotesConfig)
     data: DataConfig = field(default_factory=DataConfig)
     calendar: CalendarConfig = field(default_factory=CalendarConfig)
+    search: SearchConfig = field(default_factory=SearchConfig)
 
 
 class ConfigNotFoundError(Exception):
@@ -159,6 +167,7 @@ def _parse_config(raw: dict[str, Any]) -> Config:
         profile=_dc(ProfileConfig, raw.get("profile", {})),
         notes=_dc(NotesConfig, raw.get("notes", {})),
         data=_dc(DataConfig, raw.get("data", {})),
+        search=_dc(SearchConfig, raw.get("search", {})),
         calendar=CalendarConfig(
             enabled=cal_raw.get("enabled", False),
             sources=cal_raw.get("sources", ["manual"]),

@@ -43,6 +43,17 @@ class SwiftInferenceProvider(InferenceProvider):
         }
         if request.schema is not None:
             payload_dict["schema"] = request.schema
+        if request.enable_search:
+            payload_dict["enable_search"] = True
+            keys: dict[str, str] = {}
+            if self.config.search.brave_search_api_key:
+                keys["brave_search_api_key"] = self.config.search.brave_search_api_key
+            if self.config.search.exa_api_key:
+                keys["exa_api_key"] = self.config.search.exa_api_key
+            if self.config.search.tavily_api_key:
+                keys["tavily_api_key"] = self.config.search.tavily_api_key
+            if keys:
+                payload_dict["search_api_keys"] = keys
         payload = json.dumps(payload_dict)
         try:
             result = subprocess.run(
