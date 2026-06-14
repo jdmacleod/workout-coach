@@ -28,6 +28,11 @@ Days per week: {profile_days_per_week}
 Primary goal: {profile_primary_goal}
 Injury notes: {profile_injury_notes}
 
+## Constraints
+- Generate exactly {profile_days_per_week} training sessions. Do NOT include rest days, active recovery sessions, or off-days in the JSON. Unscheduled days are implicitly rest days.
+- No high-intensity session the day after a session with recovery_cost >= 3
+- Match weekly volume to recent history (avoid >10% load increase)
+{equipment_constraint}{duration_constraint}
 ## Next Week Notes (from last assessment — highest priority context)
 {next_week_notes}
 
@@ -43,11 +48,6 @@ Injury notes: {profile_injury_notes}
 ## Available Days
 {available_days}
 
-## Constraints
-- No high-intensity session the day after a session with recovery_cost >= 3
-- At least 1 full rest day per week
-- Match weekly volume to recent history (avoid >10% load increase)
-{equipment_constraint}{duration_constraint}
 ## planned_content Format (strength sessions)
 Use this exact structure — headings on their own lines, one exercise per bullet:
 
@@ -146,6 +146,12 @@ ASSESS_USER = """
 ## How It Went
 {how_it_went}
 
+## Extraction Notes
+- rpe: Rate of Perceived Exertion on a 1–10 scale.
+  1=trivially easy, 5=moderate, 7=challenging, 8=hard, 9=very hard, 10=maximal effort.
+  Infer from descriptions: "smooth"→6–7, "grinder"→8–9, "easy"→4–5, "tough"→7–8.
+  If no effort cues are present, return null.
+
 ## Response Schema
 {assess_schema}
 """.strip()
@@ -153,7 +159,7 @@ ASSESS_USER = """
 ASSESS_SCHEMA = """{
   "status": "completed|skipped",
   "duration_actual": null,
-  "rpe": null,
+  "rpe": 7.5,
   "mood": "great|good|neutral|tired|bad|null",
   "soreness": "none|mild|moderate|high|null",
   "prs": [{"exercise": "string", "value": "string"}],
@@ -213,8 +219,11 @@ WEEKLY_SUMMARY_USER = """
 
 NEXT_WEEK_NOTES_SYSTEM = """
 You are a fitness coach writing carry-forward notes for next week's plan.
-Write 1–3 sentences in plain English. No bullet points, no headers.
-Focus on: fatigue level, any injuries noted, whether a deload is needed, volume targets.
+Write 2–4 sentences. Required content:
+1. Fatigue level and whether a deload is needed.
+2. One concrete training target: a specific load, volume, or frequency recommendation.
+3. Any injury or soreness to monitor.
+If a deload is not needed and no injuries are present, state what to progress and by how much.
 """.strip()
 
 NEXT_WEEK_NOTES_USER = """

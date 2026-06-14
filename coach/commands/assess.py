@@ -351,7 +351,9 @@ def _apply_metrics(workout: Workout, result: dict[str, Any]) -> Workout:
 def _write_local_workout(workouts_dir: Path, workout: Workout) -> None:
     """Write updated workout front matter + body to local file."""
     workouts_dir.mkdir(parents=True, exist_ok=True)
-    slug = safe_slug(workout.note_title or workout.id)
+    title = workout.note_title or workout.id
+    title_suffix = title.removeprefix(workout.date.isoformat() + " ")
+    slug = safe_slug(title_suffix)
     filename = f"{workout.date.isoformat()}-{slug[:40]}.md"
     path = workouts_dir / filename
     path.write_text(render_workout_note(workout))
@@ -376,7 +378,8 @@ def _load_week_workouts(workouts_dir: Path, week: str) -> list[Workout]:
             w = workout_from_note(content, path.stem)
             if monday <= w.date <= sunday:
                 workouts.append(w)
-        except Exception:
+        except Exception as exc:
+            console.print(f"  [dim]Warning: skipping {path.name} — {exc}[/dim]")
             continue
     return workouts
 

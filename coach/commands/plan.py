@@ -214,7 +214,9 @@ def _load_next_week_notes(cfg: Config, week: str, notes_client: NotesClient) -> 
 
 
 def _load_history_summary(cfg: Config, weeks: int = 4) -> str:
-    """Glob last N weeks of workout files and produce a text summary."""
+    """Glob last N weeks of workout files and produce a weekly rollup summary."""
+    from collections import defaultdict
+
     from coach.notes.parser import workout_from_note
 
     workouts_dir = resolve_data_path(cfg, "workouts_dir")
@@ -227,7 +229,7 @@ def _load_history_summary(cfg: Config, weeks: int = 4) -> str:
         try:
             content = path.read_text()
             w = workout_from_note(content, path.stem)
-            if w.date >= cutoff:
+            if w.date >= cutoff and w.type != "rest":
                 workouts.append(w)
         except Exception:
             continue
@@ -235,16 +237,22 @@ def _load_history_summary(cfg: Config, weeks: int = 4) -> str:
     if not workouts:
         return "(no history yet)"
 
-    lines = []
+    # Group by ISO week and produce one summary line per week
+    weekly: dict[tuple[int, int], list[Workout]] = defaultdict(list)
     for w in workouts:
-        rpe_str = f" RPE {w.rpe}" if w.rpe else ""
-        dur_str = (
-            f" {w.duration_actual}min"
-            if w.duration_actual
-            else (f" {w.duration_planned}min (planned)" if w.duration_planned else "")
-        )
+        iso = w.date.isocalendar()
+        weekly[(iso.year, iso.week)].append(w)
+
+    lines = []
+    for (year, week_num), week_workouts in sorted(weekly.items()):
+        types = "/".join(w.type for w in week_workouts)
+        rpes = [w.rpe for w in week_workouts if w.rpe is not None]
+        avg_rpe_str = f", avg RPE {sum(rpes) / len(rpes):.1f}" if rpes else ""
+        total_min = sum((w.duration_actual or w.duration_planned or 0) for w in week_workouts)
+        dur_str = f", {total_min} min" if total_min else ""
         lines.append(
-            f"- {w.date.isoformat()} {w.type}/{w.subtype or '-'} [{w.status}]{rpe_str}{dur_str}"
+            f"- {year}-W{week_num:02d}: {len(week_workouts)} sessions,"
+            f" types: {types}{avg_rpe_str}{dur_str}"
         )
 
     return "\n".join(lines)
@@ -439,6 +447,8 @@ def _run_plan(
     workouts_dir.mkdir(parents=True, exist_ok=True)
 
     for w in workouts:
+        if w.type == "rest":
+            continue
         title_suffix = (w.note_title or "session").removeprefix(w.date.isoformat() + " ")
         slug = safe_slug(title_suffix)
         filename = f"{w.date.isoformat()}-{slug[:40]}.md"
@@ -478,6 +488,45 @@ def _run_plan(
     _print_plan_table(plan)
 
 
+_EQUIPMENT_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "dumbbell",
+        "dumbbells",
+        "kettlebell",
+        "kettlebells",
+        "cable",
+        "cables",
+        "machine",
+        "resistance band",
+        "bands",
+        "trx",
+        "rings",
+        "box",
+        "trap bar",
+        "hex bar",
+        "smith machine",
+        "sled",
+        "landmine",
+        "dip bar",
+    }
+)
+
+
+def _check_equipment_violations(sessions: list[dict[str, Any]], allowed: list[str]) -> list[str]:
+    """Return violation strings for sessions using equipment not in allowed list."""
+    allowed_lower = {e.lower() for e in allowed}
+    violations = []
+    for sess in sessions:
+        content = (sess.get("planned_content") or sess.get("rationale") or "").lower()
+        for kw in _EQUIPMENT_KEYWORDS:
+            if kw in content and kw not in allowed_lower:
+                violations.append(
+                    f"{sess.get('day', '?')} '{sess.get('title', '?')}': mentions '{kw}'"
+                )
+                break
+    return violations
+
+
 def _correct_plan_if_needed(
     plan_data: dict[str, Any],
     cfg: Config,
@@ -485,8 +534,8 @@ def _correct_plan_if_needed(
 ) -> dict[str, Any]:
     """Ask the LLM to self-audit the plan against equipment and duration constraints.
 
-    Only fires when at least one structured constraint is configured. Falls back to
-    the original plan if the correction call fails or returns unparseable JSON.
+    Retries once with a stricter prompt on failure. After correction, runs a
+    Python-level equipment check and prints any remaining violations.
     """
     equipment = cfg.profile.available_equipment
     max_duration = cfg.profile.max_session_duration_minutes
@@ -507,22 +556,48 @@ def _correct_plan_if_needed(
             "Reduce exercise count if needed to fit the time budget."
         )
 
-    correction_prompt = PLAN_CORRECTION_USER.format(
-        constraints="\n".join(f"- {c}" for c in constraints),
-        plan_json=json.dumps(plan_data, indent=2),
-        plan_schema=PLAN_SCHEMA,
-    )
+    constraints_text = "\n".join(f"- {c}" for c in constraints)
 
-    try:
-        corrected_raw = _infer_with_retry(
-            provider, PLAN_CORRECTION_SYSTEM, correction_prompt, PLAN_SCHEMA, PLAN_SCHEMA_DICT
+    def _attempt(prompt_prefix: str = "") -> dict[str, Any] | None:
+        prompt = PLAN_CORRECTION_USER.format(
+            constraints=constraints_text,
+            plan_json=json.dumps(plan_data),
+            plan_schema=PLAN_SCHEMA,
         )
-        return cast(dict[str, Any], json.loads(corrected_raw))
-    except (InferenceError, json.JSONDecodeError) as e:
+        if prompt_prefix:
+            prompt = prompt_prefix + "\n\n" + prompt
+        try:
+            raw = _infer_with_retry(
+                provider, PLAN_CORRECTION_SYSTEM, prompt, PLAN_SCHEMA, PLAN_SCHEMA_DICT
+            )
+            return cast(dict[str, Any], json.loads(raw))
+        except (InferenceError, json.JSONDecodeError):
+            return None
+
+    result = _attempt()
+    if result is None:
+        strict_prefix = (
+            f"CRITICAL: Every session MUST use ONLY this equipment: "
+            f"{', '.join(equipment or [])}. No substitutions allowed."
+        )
+        result = _attempt(strict_prefix)
+
+    if result is None:
         console.print(
-            f"[yellow]Warning: constraint correction failed ({e}). Using original plan.[/yellow]"
+            "[yellow]Warning: constraint correction failed after retry. Using original plan.[/yellow]"
         )
         return plan_data
+
+    if equipment:
+        violations = _check_equipment_violations(result.get("sessions", []), equipment)
+        if violations:
+            console.print(
+                "[yellow]Warning: plan still has equipment violations after correction:[/yellow]"
+            )
+            for v in violations:
+                console.print(f"  [yellow]• {v}[/yellow]")
+
+    return result
 
 
 def _infer_with_retry(

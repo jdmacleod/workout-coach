@@ -100,7 +100,13 @@ def _call_tavily(query: str, api_key: str) -> str:
 def _call_duckduckgo(query: str) -> str:
     resp = httpx.get(
         "https://api.duckduckgo.com/",
-        params={"q": query, "format": "json", "no_html": "1", "skip_disambig": "1", "no_redirect": "1"},
+        params={
+            "q": query,
+            "format": "json",
+            "no_html": "1",
+            "skip_disambig": "1",
+            "no_redirect": "1",
+        },
         timeout=20,
     )
     resp.raise_for_status()
@@ -160,4 +166,6 @@ def test_duckduckgo_search_returns_results() -> None:
     # "calisthenics" reliably maps to a Wikipedia article DDG can return.
     result = _call_duckduckgo("calisthenics")
     print(f"\n[DuckDuckGo] {result[:300]}")
-    assert result, "DuckDuckGo returned empty content for 'calisthenics' — unexpected for a Wikipedia topic"
+    assert result, (
+        "DuckDuckGo returned empty content for 'calisthenics' — unexpected for a Wikipedia topic"
+    )
