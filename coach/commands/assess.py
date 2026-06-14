@@ -424,4 +424,11 @@ def _generate_next_week_notes(
         observations=observations,
     )
     req = InferenceRequest(system=NEXT_WEEK_NOTES_SYSTEM, user=user, max_tokens=200)
-    return provider.infer(req).text.strip()
+    text = provider.infer(req).text.strip()
+    # Drop any leading lines that are markdown headers — the model sometimes echoes
+    # the user prompt structure (## Week:, ## Completion rate:, etc.) before writing
+    # the actual notes. Those headers break parse_sections when stored in the assessment.
+    lines = text.splitlines()
+    while lines and lines[0].startswith("#"):
+        lines.pop(0)
+    return "\n".join(lines).strip()

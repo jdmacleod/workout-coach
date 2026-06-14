@@ -357,16 +357,27 @@ def _run_plan(
     # Enable web search on the Swift provider when equipment constraints are configured
     use_search = bool(cfg.profile.available_equipment) and provider.provider_name() == "swift"
 
-    # Call inference (with one retry on parse error)
+    # Call inference (with one retry on parse error, and one retry on transient model error)
     with console.status("Thinking...", spinner="dots"):
-        raw_response = _infer_with_retry(
-            provider,
-            PLAN_GENERATION_SYSTEM,
-            user_prompt,
-            PLAN_SCHEMA,
-            PLAN_SCHEMA_DICT,
-            enable_search=use_search,
-        )
+        try:
+            raw_response = _infer_with_retry(
+                provider,
+                PLAN_GENERATION_SYSTEM,
+                user_prompt,
+                PLAN_SCHEMA,
+                PLAN_SCHEMA_DICT,
+                enable_search=use_search,
+            )
+        except InferenceError:
+            console.print("[yellow]Model error — retrying once...[/yellow]")
+            raw_response = _infer_with_retry(
+                provider,
+                PLAN_GENERATION_SYSTEM,
+                user_prompt,
+                PLAN_SCHEMA,
+                PLAN_SCHEMA_DICT,
+                enable_search=use_search,
+            )
 
     # Parse JSON response
     try:
@@ -379,6 +390,18 @@ def _run_plan(
     # Correction pass: ask the LLM to self-audit against equipment/duration constraints
     with console.status("Checking constraints...", spinner="dots"):
         plan_data = _correct_plan_if_needed(plan_data, cfg, provider)
+
+    # Python-level session count enforcement: keep only the first N training sessions
+    target_count = cfg.profile.fitness_days_per_week
+    if target_count:
+        sessions = plan_data.get("sessions", [])
+        training = [s for s in sessions if s.get("type", "strength") != "rest"]
+        if len(training) > target_count:
+            keep = set(id(s) for s in training[:target_count])
+            plan_data = {**plan_data, "sessions": [s for s in sessions if id(s) in keep]}
+            console.print(
+                f"[dim]Trimmed plan from {len(training)} to {target_count} sessions.[/dim]"
+            )
 
     # Build plan objects
     workouts: list[Workout] = []
