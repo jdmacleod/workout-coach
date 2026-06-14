@@ -23,20 +23,26 @@ struct WebSearchTool: Tool {
     func call(arguments: Arguments) async throws -> String {
         if let key = searchApiKeys["brave_search_api_key"], !key.isEmpty,
            let result = try? await searchBrave(query: arguments.query, apiKey: key),
-           !result.isEmpty { return result }
+           !result.isEmpty { return cap(result) }
 
         if let key = searchApiKeys["exa_api_key"], !key.isEmpty,
            let result = try? await searchExa(query: arguments.query, apiKey: key),
-           !result.isEmpty { return result }
+           !result.isEmpty { return cap(result) }
 
         if let key = searchApiKeys["tavily_api_key"], !key.isEmpty,
            let result = try? await searchTavily(query: arguments.query, apiKey: key),
-           !result.isEmpty { return result }
+           !result.isEmpty { return cap(result) }
 
         if let result = try? await searchDuckDuckGo(query: arguments.query),
-           !result.isEmpty { return result }
+           !result.isEmpty { return cap(result) }
 
         return "No search results for: \(arguments.query) (providers tried: \(resolvedProviders().joined(separator: ", ")))"
+    }
+
+    // Cap search results to ~200 tokens per call so 2-3 calls don't overflow the
+    // on-device context window when added to the existing session transcript.
+    private func cap(_ text: String, limit: Int = 800) -> String {
+        text.count > limit ? String(text.prefix(limit)) + "…" : text
     }
 
     private func resolvedProviders() -> [String] {
@@ -230,8 +236,11 @@ do {  // I3: catch all model errors and return them as a structured error respon
             """
             _ = try await researchSession.respond(to: researchPrompt, options: opts)
 
+            // Phase 2: short trigger only — request.user is already in the session
+            // transcript from Phase 1. Re-sending it would duplicate ~1000+ tokens
+            // and overflow the on-device context window.
             let result = try await researchSession.respond(
-                to: request.user,
+                to: "Generate the weekly workout plan JSON now, incorporating the exercises found above.",
                 schema: genSchema,
                 includeSchemaInPrompt: false,
                 options: opts
