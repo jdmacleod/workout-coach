@@ -207,7 +207,6 @@ func buildDynamicSchema(_ node: SchemaNode) throws -> DynamicGenerationSchema {
 let inputData = FileHandle.standardInput.readDataToEndOfFile()
 let request = try JSONDecoder().decode(Request.self, from: inputData)
 
-let session = LanguageModelSession(instructions: request.system)
 let opts = GenerationOptions(maximumResponseTokens: request.maxTokens)
 
 do {  // I3: catch all model errors and return them as a structured error response
@@ -220,6 +219,9 @@ do {  // I3: catch all model errors and return them as a structured error respon
             // Two-phase generation: Phase 1 researches exercises via web search,
             // Phase 2 generates the schema-constrained JSON plan on the same session
             // (transcript from Phase 1 persists as context for Phase 2).
+            // NOTE: session is created here only — do NOT create a separate session
+            // above this branch. Two simultaneous LanguageModelSession objects compete
+            // for the system model daemon and trigger GenerationError -1 under load.
             let searchTool = WebSearchTool(searchApiKeys: request.searchApiKeys ?? [:])
             let researchSession = LanguageModelSession(
                 tools: [searchTool],
@@ -247,6 +249,7 @@ do {  // I3: catch all model errors and return them as a structured error respon
             )
             text = result.content.jsonString
         } else {
+            let session = LanguageModelSession(instructions: request.system)
             let result = try await session.respond(
                 to: request.user,
                 schema: genSchema,
@@ -256,13 +259,34 @@ do {  // I3: catch all model errors and return them as a structured error respon
             text = result.content.jsonString
         }
     } else {
+        let session = LanguageModelSession(instructions: request.system)
         let result = try await session.respond(to: request.user, options: opts)
         text = result.content
     }
     let response = Response(text: text, model: "apple/on-device")
     FileHandle.standardOutput.write(try JSONEncoder().encode(response))
 } catch {
-    let errResp = Response(text: "", model: "apple/on-device", error: error.localizedDescription)
+    // Emit structured error detail so Python can surface domain+code for diagnosis.
+    // localizedDescription gives "...GenerationError error -1" but loses userInfo.
+    let nsErr = error as NSError
+    var detail = error.localizedDescription
+    detail += " [domain=\(nsErr.domain) code=\(nsErr.code)]"
+    let infoKeys: [String] = [
+        NSLocalizedFailureReasonErrorKey,
+        NSDebugDescriptionErrorKey,
+        "NSLocalizedDescription",
+        "NSUnderlyingError",
+    ]
+    let extras = infoKeys.compactMap { k -> String? in
+        guard let v = nsErr.userInfo[k] else { return nil }
+        return "\(k)=\(v)"
+    }
+    if !extras.isEmpty { detail += " {\(extras.joined(separator: "; "))}" }
+
+    // Write full detail to stderr for Python-side capture via result.stderr
+    FileHandle.standardError.write((detail + "\n").data(using: .utf8)!)
+
+    let errResp = Response(text: "", model: "apple/on-device", error: detail)
     if let data = try? JSONEncoder().encode(errResp) {
         FileHandle.standardOutput.write(data)
     }

@@ -219,11 +219,9 @@ WEEKLY_SUMMARY_USER = """
 
 NEXT_WEEK_NOTES_SYSTEM = """
 You are a fitness coach writing carry-forward notes for next week's plan.
-Write 2–4 sentences. Required content:
-1. Fatigue level and whether a deload is needed.
-2. One concrete training target: a specific load, volume, or frequency recommendation.
-3. Any injury or soreness to monitor.
-If a deload is not needed and no injuries are present, state what to progress and by how much.
+Write 2–4 plain sentences. No bullet points, no numbered lists, no markdown headers.
+Cover fatigue level, whether a deload is needed, one specific load or volume target to hit,
+and any soreness or injury to watch. Keep it under 80 words.
 """.strip()
 
 NEXT_WEEK_NOTES_USER = """

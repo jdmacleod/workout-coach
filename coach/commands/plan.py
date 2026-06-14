@@ -357,27 +357,15 @@ def _run_plan(
     # Enable web search on the Swift provider when equipment constraints are configured
     use_search = bool(cfg.profile.available_equipment) and provider.provider_name() == "swift"
 
-    # Call inference (with one retry on parse error, and one retry on transient model error)
     with console.status("Thinking...", spinner="dots"):
-        try:
-            raw_response = _infer_with_retry(
-                provider,
-                PLAN_GENERATION_SYSTEM,
-                user_prompt,
-                PLAN_SCHEMA,
-                PLAN_SCHEMA_DICT,
-                enable_search=use_search,
-            )
-        except InferenceError:
-            console.print("[yellow]Model error — retrying once...[/yellow]")
-            raw_response = _infer_with_retry(
-                provider,
-                PLAN_GENERATION_SYSTEM,
-                user_prompt,
-                PLAN_SCHEMA,
-                PLAN_SCHEMA_DICT,
-                enable_search=use_search,
-            )
+        raw_response = _infer_with_retry(
+            provider,
+            PLAN_GENERATION_SYSTEM,
+            user_prompt,
+            PLAN_SCHEMA,
+            PLAN_SCHEMA_DICT,
+            enable_search=use_search,
+        )
 
     # Parse JSON response
     try:
@@ -434,7 +422,10 @@ def _run_plan(
             subtype=session.get("subtype"),
             duration_planned=session.get("duration_minutes"),
             planned_content=_normalize_planned_content(
-                session.get("planned_content") or session.get("rationale") or "",
+                _scrub_equipment(
+                    session.get("planned_content") or session.get("rationale") or "",
+                    equipment,
+                ),
                 wtype,
             )
             or None,
@@ -442,13 +433,13 @@ def _run_plan(
         )
         workouts.append(w)
 
-    # Python duration check (deterministic, runs after correction pass)
+    # Python duration clamp (deterministic, runs after correction pass)
     if max_duration:
         for w in workouts:
             if w.type != "rest" and w.duration_planned and w.duration_planned > max_duration:
+                w.duration_planned = max_duration
                 console.print(
-                    f"[yellow]Warning: {w.date.strftime('%a')} session "
-                    f"({w.duration_planned} min) exceeds your {max_duration}-min limit.[/yellow]"
+                    f"[dim]Clamped {w.date.strftime('%a')} session to {max_duration} min.[/dim]"
                 )
 
     plan = WeeklyPlan(
@@ -533,6 +524,25 @@ _EQUIPMENT_KEYWORDS: frozenset[str] = frozenset(
         "dip bar",
     }
 )
+
+
+def _scrub_equipment(content: str, allowed: list[str]) -> str:
+    """Replace disallowed equipment keywords in planned_content with the first allowed item."""
+    import re
+
+    if not content or not allowed:
+        return content
+    allowed_lower = {e.lower() for e in allowed}
+    substitute = allowed[0]
+    lines = content.splitlines()
+    result = []
+    for line in lines:
+        line_lower = line.lower()
+        for kw in _EQUIPMENT_KEYWORDS:
+            if kw in line_lower and kw not in allowed_lower:
+                line = re.sub(re.escape(kw), substitute, line, flags=re.IGNORECASE)
+        result.append(line)
+    return "\n".join(result)
 
 
 def _check_equipment_violations(sessions: list[dict[str, Any]], allowed: list[str]) -> list[str]:

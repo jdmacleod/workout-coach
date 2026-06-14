@@ -238,13 +238,13 @@ def test_correction_pass_falls_back_on_inference_error(tmp_path: pytest.MonkeyPa
     assert result == plan_data
 
 
-# ── Python duration warning ───────────────────────────────────────────────────
+# ── Python duration clamp ─────────────────────────────────────────────────────
 
 
-def test_python_duration_warning_when_exceeded(
-    tmp_path: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_python_duration_clamp_when_exceeded(tmp_path: pytest.MonkeyPatch) -> None:
+    """Sessions over max_session_duration_minutes are clamped, not just warned about."""
     from coach.commands.plan import _run_plan
+    from coach.notes.parser import workout_from_note
 
     long_session_response = json.dumps(
         {
@@ -271,10 +271,60 @@ def test_python_duration_warning_when_exceeded(
         max_session_duration_minutes=30,
     )
     (tmp_path / "training-info.md").write_text("# Training Info\nGeneral fitness.")
+    (tmp_path / "workouts").mkdir(exist_ok=True)
+    (tmp_path / "plans").mkdir(exist_ok=True)
     provider = MockInferenceProvider(response_text=long_session_response)
     mock_client = MockNotesClient()
 
     with patch("coach.commands.plan.load_config", return_value=cfg):
+        _run_plan(
+            week="2026-W30",
+            focus=None,
+            dry_run=False,
+            overwrite=False,
+            no_calendar=True,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    # The workout file on disk must have duration_planned clamped to 30, not 55
+    workouts_dir = tmp_path / "workouts"
+    files = list(workouts_dir.glob("*.md"))
+    assert len(files) == 1, f"Expected 1 workout file, got {files}"
+    w = workout_from_note(files[0].read_text(), files[0].stem)
+    assert w.duration_planned == 30, f"Expected clamped to 30, got {w.duration_planned}"
+
+
+def test_duration_clamp_skips_rest_sessions(tmp_path: pytest.MonkeyPatch) -> None:
+    """Rest sessions are excluded from the duration clamp even with an absurd duration."""
+    from coach.commands.plan import _run_plan
+
+    rest_response = json.dumps(
+        {
+            "training_focus": "recovery",
+            "weekly_volume": "low",
+            "generation_notes": "",
+            "sessions": [
+                {
+                    "day": "Mon",
+                    "type": "rest",
+                    "subtype": "",
+                    "duration_minutes": 999,
+                    "title": "Rest",
+                    "planned_content": "",
+                    "rationale": "Full rest",
+                }
+            ],
+        }
+    )
+
+    cfg = _make_config(str(tmp_path), max_session_duration_minutes=30)
+    (tmp_path / "training-info.md").write_text("# Training Info\nGeneral fitness.")
+    provider = MockInferenceProvider(response_text=rest_response)
+    mock_client = MockNotesClient()
+
+    with patch("coach.commands.plan.load_config", return_value=cfg):
+        # Should not raise — rest sessions are exempt from duration clamping
         _run_plan(
             week="2026-W30",
             focus=None,
@@ -284,10 +334,6 @@ def test_python_duration_warning_when_exceeded(
             notes_client=mock_client,
             inference_provider=provider,
         )
-
-    # max_session_duration_minutes=30 triggers the correction pass (2 calls total)
-    # The Python duration warning fires after, since corrected plan still shows 55 min
-    assert len(provider.calls) == 2
 
 
 def test_search_enabled_when_equipment_set_and_swift_provider(
@@ -339,43 +385,3 @@ def test_search_not_enabled_for_non_swift_provider(tmp_path: pytest.MonkeyPatch)
         )
 
     assert provider.calls[0].enable_search is False
-
-
-def test_rest_sessions_skip_duration_check(tmp_path: pytest.MonkeyPatch) -> None:
-    from coach.commands.plan import _run_plan
-
-    rest_response = json.dumps(
-        {
-            "training_focus": "recovery",
-            "weekly_volume": "low",
-            "generation_notes": "",
-            "sessions": [
-                {
-                    "day": "Mon",
-                    "type": "rest",
-                    "subtype": "",
-                    "duration_minutes": 999,
-                    "title": "Rest",
-                    "planned_content": "",
-                    "rationale": "Full rest",
-                }
-            ],
-        }
-    )
-
-    cfg = _make_config(str(tmp_path), max_session_duration_minutes=30)
-    (tmp_path / "training-info.md").write_text("# Training Info\nGeneral fitness.")
-    provider = MockInferenceProvider(response_text=rest_response)
-    mock_client = MockNotesClient()
-
-    with patch("coach.commands.plan.load_config", return_value=cfg):
-        # Should not raise or warn about the rest session's inflated duration
-        _run_plan(
-            week="2026-W30",
-            focus=None,
-            dry_run=True,
-            overwrite=False,
-            no_calendar=True,
-            notes_client=mock_client,
-            inference_provider=provider,
-        )

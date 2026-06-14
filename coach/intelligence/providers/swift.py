@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,20 @@ class SwiftInferenceProvider(InferenceProvider):
         return major >= 26 and self._binary_path().exists()
 
     def infer(self, request: InferenceRequest) -> InferenceResponse:
+        last_error: InferenceError | None = None
+        for attempt in range(3):
+            if attempt > 0:
+                time.sleep(attempt)  # 1s after first failure, 2s after second
+            try:
+                return self._do_infer(request)
+            except InferenceTimeoutError:
+                raise  # timeouts already burned 120s each — never retry
+            except InferenceError as e:
+                last_error = e
+        assert last_error is not None
+        raise last_error
+
+    def _do_infer(self, request: InferenceRequest) -> InferenceResponse:
         payload_dict: dict[str, Any] = {
             "system": request.system,
             "user": request.user,
@@ -71,7 +86,12 @@ class SwiftInferenceProvider(InferenceProvider):
         except json.JSONDecodeError as e:
             raise InferenceParseError(f"coach-infer returned invalid JSON: {e}") from e
         if data.get("error"):
-            raise InferenceError(f"coach-infer model error: {data['error']}")
+            # Include stderr diagnostic detail (domain/code/userInfo) when present
+            stderr_detail = result.stderr.decode().strip()
+            msg = data["error"]
+            if stderr_detail and stderr_detail not in msg:
+                msg = f"{msg} | stderr: {stderr_detail}"
+            raise InferenceError(f"coach-infer model error: {msg}")
         return InferenceResponse(
             text=data["text"],
             provider="swift",

@@ -89,3 +89,89 @@ def test_partial_search_keys_only_non_empty() -> None:
     keys = payload.get("search_api_keys", {})
     assert "brave_search_api_key" in keys
     assert "exa_api_key" not in keys
+
+
+def test_transient_error_retried_with_backoff() -> None:
+    """GenerationError -1 on first attempt is retried; second attempt succeeds."""
+    import subprocess
+
+    from coach.intelligence.providers.swift import SwiftInferenceProvider
+
+    cfg = _make_config()
+    provider = SwiftInferenceProvider(cfg)
+    req = InferenceRequest(system="sys", user="usr", max_tokens=512)
+
+    call_count = 0
+
+    def fake_run(cmd: list, *, input: bytes, capture_output: bool, timeout: int):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            # First attempt: transient GenerationError
+            resp = json.dumps({"error": "GenerationError error -1."})
+        else:
+            # Second attempt: success
+            resp = json.dumps({"text": '{"ok": true}', "model": "apple/on-device"})
+        result = subprocess.CompletedProcess(cmd, 0)
+        result.stdout = resp.encode()
+        result.stderr = b""
+        return result
+
+    sleep_calls: list[float] = []
+
+    with (
+        patch.object(provider, "_binary_path", return_value=Path("/fake/CoachInfer")),
+        patch("coach.intelligence.providers.swift.subprocess.run", side_effect=fake_run),
+        patch(
+            "coach.intelligence.providers.swift.time.sleep",
+            side_effect=lambda s: sleep_calls.append(s),
+        ),
+    ):
+        response = provider.infer(req)
+
+    assert call_count == 2
+    assert len(sleep_calls) == 1
+    assert sleep_calls[0] == 1  # 1s backoff after first failure
+    assert response.text == '{"ok": true}'
+
+
+def test_sustained_error_exhausts_retries() -> None:
+    """GenerationError -1 on all 3 attempts raises InferenceError after backoff."""
+    import subprocess
+
+    from coach.intelligence.exceptions import InferenceError
+    from coach.intelligence.providers.swift import SwiftInferenceProvider
+
+    cfg = _make_config()
+    provider = SwiftInferenceProvider(cfg)
+    req = InferenceRequest(system="sys", user="usr", max_tokens=512)
+
+    call_count = 0
+
+    def fake_run(cmd: list, *, input: bytes, capture_output: bool, timeout: int):
+        nonlocal call_count
+        call_count += 1
+        resp = json.dumps({"error": "GenerationError error -1."})
+        result = subprocess.CompletedProcess(cmd, 0)
+        result.stdout = resp.encode()
+        result.stderr = b""
+        return result
+
+    sleep_calls: list[float] = []
+
+    with (
+        patch.object(provider, "_binary_path", return_value=Path("/fake/CoachInfer")),
+        patch("coach.intelligence.providers.swift.subprocess.run", side_effect=fake_run),
+        patch(
+            "coach.intelligence.providers.swift.time.sleep",
+            side_effect=lambda s: sleep_calls.append(s),
+        ),
+    ):
+        try:
+            provider.infer(req)
+            raise AssertionError("Expected InferenceError")
+        except InferenceError:
+            pass
+
+    assert call_count == 3
+    assert sleep_calls == [1, 2]  # 1s after attempt 1, 2s after attempt 2
