@@ -78,6 +78,7 @@ ignore_missing_imports = true
 addopts = "--cov=coach --cov-report=term-missing --cov-report=xml"
 markers = [
     "integration: tests requiring a live Apple Notes.app (skip in CI with -m 'not integration')",
+    "search: smoke tests for external search provider APIs (require network + optional API keys)",
 ]
 
 [tool.coverage.run]
