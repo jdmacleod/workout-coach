@@ -308,7 +308,7 @@ def _extract_metrics(provider: InferenceProvider, workout: Workout) -> dict[str,
         assess_schema=ASSESS_SCHEMA,
     )
     req = InferenceRequest(
-        system=ASSESS_SYSTEM, user=user, max_tokens=512, schema=ASSESS_SCHEMA_DICT
+        system=ASSESS_SYSTEM, user=user, max_tokens=1500, schema=ASSESS_SCHEMA_DICT
     )
     resp = provider.infer(req)
 
@@ -319,7 +319,7 @@ def _extract_metrics(provider: InferenceProvider, workout: Workout) -> dict[str,
         correction = JSON_PARSE_CORRECTION.format(
             previous_response=resp.text[:500], schema=ASSESS_SCHEMA
         )
-        retry_req = InferenceRequest(system=ASSESS_SYSTEM, user=correction, max_tokens=512)
+        retry_req = InferenceRequest(system=ASSESS_SYSTEM, user=correction, max_tokens=1500)
         retry_resp = provider.infer(retry_req)
         try:
             return cast(dict[str, Any], json.loads(extract_json_text(retry_resp.text)))
@@ -402,7 +402,7 @@ def _generate_weekly_summary(
         total_duration_min=total_duration,
         session_details=session_details,
     )
-    req = InferenceRequest(system=WEEKLY_SUMMARY_SYSTEM, user=user, max_tokens=256)
+    req = InferenceRequest(system=WEEKLY_SUMMARY_SYSTEM, user=user, max_tokens=800)
     return provider.infer(req).text.strip()
 
 
@@ -423,7 +423,7 @@ def _generate_next_week_notes(
         session_details=session_details,
         observations=observations,
     )
-    req = InferenceRequest(system=NEXT_WEEK_NOTES_SYSTEM, user=user, max_tokens=200)
+    req = InferenceRequest(system=NEXT_WEEK_NOTES_SYSTEM, user=user, max_tokens=800)
     text = provider.infer(req).text.strip()
     # Drop any leading lines that are markdown headers — the model sometimes echoes
     # the user prompt structure (## Week:, ## Completion rate:, etc.) before writing

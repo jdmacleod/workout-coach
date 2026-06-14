@@ -23,28 +23,43 @@ EXAMPLES_DIR = DATA_DIR / "examples"
 @dataclass
 class LLMSwiftConfig:
     binary: str = "swift/.build/release/CoachInfer"
+    # Apple Foundation Models total context window (input + output).
+    # max_tokens caps output; context_window drives the prompt truncation guard.
+    max_tokens: int = 2048
+    context_window: int = 4096
 
 
 @dataclass
 class LLMAppleConfig:
     shortcut_prefix: str = "EC-"
+    # max_tokens is intentionally absent: the Apple Shortcuts provider passes
+    # prompts to a Shortcut via subprocess and has no way to enforce an output
+    # token limit from this side. The Shortcut's Foundation Models call enforces
+    # its own limit. See apple.py for details.
 
 
 @dataclass
 class LLMOllamaConfig:
     base_url: str = "http://localhost:11434"
     model: str = "llama3.2"
+    max_tokens: int = 2048
+    # num_ctx sets the context window at the Ollama server level when the model
+    # is loaded. Must be >= max_tokens. Ollama's server default is often 2048
+    # even for models that support much larger windows (e.g. llama3.2 → 128K).
+    num_ctx: int = 2048
 
 
 @dataclass
 class LLMLlamaCppConfig:
     server_url: str = "http://localhost:8080"
     model_path: str = ""
+    max_tokens: int = 2048
 
 
 @dataclass
 class LLMAnthropicConfig:
     model: str = "claude-sonnet-4-20250514"
+    max_tokens: int = 4096
 
 
 @dataclass
@@ -145,7 +160,24 @@ def load_config() -> Config:
             raw = tomllib.load(f)
         except tomllib.TOMLDecodeError as e:
             raise ConfigError(f"Invalid TOML in {CONFIG_FILE}: {e}") from e
-    return _parse_config(raw)
+    config = _parse_config(raw)
+    _validate_max_tokens(config)
+    return config
+
+
+def _validate_max_tokens(config: Config) -> None:
+    """Validate that all per-provider max_tokens values are positive integers."""
+    checks: list[tuple[str, int]] = [
+        ("llm.swift.max_tokens", config.llm.swift.max_tokens),
+        ("llm.swift.context_window", config.llm.swift.context_window),
+        ("llm.ollama.max_tokens", config.llm.ollama.max_tokens),
+        ("llm.ollama.num_ctx", config.llm.ollama.num_ctx),
+        ("llm.llamacpp.max_tokens", config.llm.llamacpp.max_tokens),
+        ("llm.anthropic.max_tokens", config.llm.anthropic.max_tokens),
+    ]
+    for name, val in checks:
+        if val <= 0:
+            raise ConfigError(f"Invalid config: {name} must be > 0, got {val}")
 
 
 def _parse_config(raw: dict[str, Any]) -> Config:

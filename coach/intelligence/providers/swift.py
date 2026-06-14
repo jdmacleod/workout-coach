@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import time
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -51,10 +52,28 @@ class SwiftInferenceProvider(InferenceProvider):
         raise last_error
 
     def _do_infer(self, request: InferenceRequest) -> InferenceResponse:
+        effective_max_tokens = min(request.max_tokens, self.config.llm.swift.max_tokens)
+        context_window = self.config.llm.swift.context_window
+        estimated_input_tokens = (len(request.system) + len(request.user)) // 4
+        if estimated_input_tokens + effective_max_tokens > context_window:
+            available_input_chars = (context_window - effective_max_tokens) * 4 - len(
+                request.system
+            )
+            available_input_chars = max(0, available_input_chars)
+            truncated_user = request.user[:available_input_chars]
+            if truncated_user != request.user:
+                warnings.warn(
+                    f"swift: user prompt truncated from {len(request.user)} to {len(truncated_user)} chars "
+                    f"to fit {context_window}-token context window",
+                    stacklevel=2,
+                )
+            user = truncated_user
+        else:
+            user = request.user
         payload_dict: dict[str, Any] = {
             "system": request.system,
-            "user": request.user,
-            "max_tokens": request.max_tokens,
+            "user": user,
+            "max_tokens": effective_max_tokens,
         }
         if request.schema is not None:
             payload_dict["schema"] = request.schema

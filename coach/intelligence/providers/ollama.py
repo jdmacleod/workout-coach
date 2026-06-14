@@ -26,15 +26,17 @@ class OllamaProvider(InferenceProvider):
             return False
 
     def infer(self, request: InferenceRequest) -> InferenceResponse:
+        effective_max_tokens = min(request.max_tokens, self.config.llm.ollama.max_tokens)
         payload = {
             "model": self.config.llm.ollama.model,
             "messages": [
                 {"role": "system", "content": request.system},
                 {"role": "user", "content": request.user},
             ],
-            "max_tokens": request.max_tokens,
+            "max_tokens": effective_max_tokens,
             "temperature": request.temperature,
             "stream": False,
+            "options": {"num_ctx": self.config.llm.ollama.num_ctx},
         }
         try:
             r = httpx.post(

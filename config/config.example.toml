@@ -17,23 +17,46 @@ provider = "swift"
 [llm.swift]
 # Path to the compiled coach-infer binary (relative to project root)
 binary = "swift/.build/release/CoachInfer"
+# Apple Foundation Models total context window: 4096 tokens (input + output combined).
+# max_tokens caps output tokens per call. context_window drives the prompt truncation
+# guard — if (estimated input tokens + max_tokens) > context_window, the user prompt
+# is trimmed from the end with a warning. Setting max_tokens > 2048 risks overflow on
+# long-context requests (4-week history + large training-info.md).
+max_tokens     = 2048
+context_window = 4096
 
 [llm.apple]
 # Prefix used to identify Exercise Coach shortcuts in Shortcuts.app
 shortcut_prefix = "EC-"
+# Note: max_tokens is not configurable for the apple provider. The Shortcuts provider
+# passes prompts to a macOS Shortcut via subprocess; there is no way to enforce an
+# output token limit from the Python side. The Shortcut's Foundation Models call
+# enforces its own limit (Apple Foundation Models: 4096 total context window).
 
 [llm.ollama]
-base_url = "http://localhost:11434"
-model    = "llama3.2"
+base_url  = "http://localhost:11434"
+model     = "llama3.2"
+# max_tokens caps output tokens per call. num_ctx sets the server-side context window
+# when the model is loaded — Ollama's default is often 2048 even for models that
+# support much larger windows (llama3.2 supports up to 128K). Increase num_ctx if
+# your model supports it and you need more context. num_ctx must be >= max_tokens.
+max_tokens = 2048
+num_ctx    = 2048
 
 [llm.llamacpp]
 server_url = "http://localhost:8080"
 model_path = "~/models/mistral-7b-instruct.gguf"   # informational only
+# max_tokens caps output tokens per call. Context window depends on the loaded model
+# and the --ctx-size flag used when starting the llama.cpp server (typical: 4096–32768).
+max_tokens = 2048
 
 [llm.anthropic]
 model = "claude-sonnet-4-20250514"
 # API key is read from the ANTHROPIC_API_KEY environment variable.
 # Do not paste your API key into this file.
+# max_tokens caps output tokens per call. claude-sonnet-4 supports up to 64K output;
+# 4096 is a practical default that covers all plan and assessment prompts.
+max_tokens = 4096
 
 # ── User Profile (cold-start onboarding) ─────────────────────────────────────
 # Written by `coach setup`. Values are injected into the planning prompt.

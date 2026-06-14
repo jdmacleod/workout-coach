@@ -643,7 +643,7 @@ def _infer_with_retry(
 ) -> str:
     """Call inference with one retry on parse failure."""
     req = InferenceRequest(
-        system=system, user=user, max_tokens=2048, schema=schema_dict, enable_search=enable_search
+        system=system, user=user, max_tokens=3500, schema=schema_dict, enable_search=enable_search
     )
     resp = provider.infer(req)
 
@@ -656,7 +656,7 @@ def _infer_with_retry(
 
     # Retry with correction prompt
     correction = JSON_PARSE_CORRECTION.format(previous_response=resp.text[:500], schema=schema)
-    retry_req = InferenceRequest(system=system, user=correction, max_tokens=2048)
+    retry_req = InferenceRequest(system=system, user=correction, max_tokens=3500)
     retry_resp = provider.infer(retry_req)
     retry_text = extract_json_text(retry_resp.text)
     try:

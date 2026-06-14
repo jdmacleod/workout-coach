@@ -21,11 +21,12 @@ class AnthropicProvider(InferenceProvider):
     def infer(self, request: InferenceRequest) -> InferenceResponse:
         import anthropic as sdk
 
+        effective_max_tokens = min(request.max_tokens, self.config.llm.anthropic.max_tokens)
         try:
             client = sdk.Anthropic()
             message = client.messages.create(
                 model=self.config.llm.anthropic.model,
-                max_tokens=request.max_tokens,
+                max_tokens=effective_max_tokens,
                 system=request.system,
                 messages=[{"role": "user", "content": request.user}],
             )
