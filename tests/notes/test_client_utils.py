@@ -196,12 +196,21 @@ def test_note_exists_nested_folder() -> None:
 def test_list_notes_nested_folder() -> None:
     """list_notes must traverse nested folders rather than using a slash-path."""
     client = NotesClient(account="iCloud", root_folder="Exercise Coach")
-    with patch("coach.notes.client._run_applescript", return_value="Note A, Note B") as mock_run:
+    with patch("coach.notes.client._run_applescript", return_value="Note A\nNote B") as mock_run:
         titles = client.list_notes("Exercise Coach/Workouts")
     assert titles == ["Note A", "Note B"]
     script = mock_run.call_args[0][0]
     assert '"Exercise Coach/Workouts"' not in script
     assert 'set targetFolder to folder "Workouts" of targetFolder' in script
+
+
+def test_list_notes_newline_delimiter() -> None:
+    """list_notes parses titles correctly when titles contain commas."""
+    client = NotesClient(account="iCloud", root_folder="Exercise Coach")
+    raw = "2026-06-11 Yoga, Flow\n2026-06-12 Hotel Gym\n2026-06-13 Run"
+    with patch("coach.notes.client._run_applescript", return_value=raw):
+        titles = client.list_notes("Exercise Coach/Workouts")
+    assert titles == ["2026-06-11 Yoga, Flow", "2026-06-12 Hotel Gym", "2026-06-13 Run"]
 
 
 # ── _is_not_found_error helper ────────────────────────────────────────────────

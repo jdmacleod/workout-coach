@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import json
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from coach.config import Config, DataConfig, NotesConfig
 from coach.notes.schema import FOLDER_ASSESSMENTS
@@ -223,3 +223,77 @@ def test_assess_week_writes_local_assessment_file(tmp_path):
     assert assessment_file.exists()
     content = assessment_file.read_text()
     assert "## Next Week Notes" in content
+
+
+def test_sync_auto_sync_notes_down(tmp_path):
+    """NotesClientError during auto-sync is non-fatal; assess continues normally."""
+    from coach.commands.assess import _run_assess
+    from coach.notes.exceptions import NotesClientError
+
+    cfg = _make_config(str(tmp_path))
+    cfg.notes.auto_sync = True
+
+    provider_responses = [MOCK_ASSESS_RESPONSE, MOCK_SUMMARY_RESPONSE, MOCK_NEXT_WEEK_NOTES]
+    provider = MockInferenceProvider(available=True)
+    call_idx = [0]
+
+    def mock_infer(req):
+        from coach.intelligence.provider import InferenceResponse
+
+        resp = provider_responses[min(call_idx[0], len(provider_responses) - 1)]
+        call_idx[0] += 1
+        return InferenceResponse(text=resp, provider="mock", model="mock")
+
+    provider.infer = mock_infer
+
+    workouts_dir = tmp_path / "workouts"
+    today = datetime.date.today()
+    iso = today.isocalendar()
+    week_str = f"{iso.year}-W{iso.week:02d}"
+    jan4 = datetime.date(iso.year, 1, 4)
+    monday = jan4 - datetime.timedelta(days=jan4.weekday()) + datetime.timedelta(weeks=iso.week - 1)
+    _write_workout(workouts_dir, monday.isoformat(), "Upper Body")
+
+    # Make list_notes raise NotesClientError to simulate Notes.app being down
+    mock_client = MockNotesClient()
+    mock_list = MagicMock(side_effect=NotesClientError("Notes unavailable"))
+    with (
+        patch.object(mock_client, "list_notes", mock_list),
+        patch("coach.commands.assess.load_config", return_value=cfg),
+    ):
+        _run_assess(
+            workout_title=None,
+            week=week_str,
+            dry_run=True,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+    # auto-sync was attempted (list_notes called once) and failure was non-fatal
+    assert mock_list.call_count == 1
+
+
+def test_sync_auto_sync_config_disabled(tmp_path):
+    """When auto_sync=False, _sync_notes is never called during assess."""
+    from coach.commands.assess import _run_assess
+
+    cfg = _make_config(str(tmp_path))
+    cfg.notes.auto_sync = False
+
+    provider = MockInferenceProvider(response_text=MOCK_ASSESS_RESPONSE)
+    mock_client = MockNotesClient()
+    today = datetime.date.today()
+    iso = today.isocalendar()
+    week_str = f"{iso.year}-W{iso.week:02d}"
+
+    with (
+        patch("coach.commands.assess._sync_notes") as mock_sync,
+        patch("coach.commands.assess.load_config", return_value=cfg),
+    ):
+        _run_assess(
+            workout_title=None,
+            week=week_str,
+            dry_run=True,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+    mock_sync.assert_not_called()
