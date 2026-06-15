@@ -92,7 +92,7 @@ def _run_assess(
         try:
             synced = _sync_notes(cfg, client, verbose=False, provider=provider, dry_run=dry_run)
             if synced > 0:
-                console.print(f"[dim]Synced {synced} note(s) from Apple Notes.[/dim]")
+                console.print(f"[dim]Imported {synced} new note(s) from Apple Notes.[/dim]")
         except (NotesClientError, OSError):
             console.print(
                 "[dim]Warning: Apple Notes unavailable — skipping auto-sync. "
@@ -199,9 +199,11 @@ def _assess_week(
     if not weekly_workouts:
         console.print(f"[yellow]No local workout files found for {week}.[/yellow]")
         console.print(
-            "  [dim]coach assess --week reads from data/workouts/. "
-            "Workout notes edited only in Apple Notes won't appear here — "
-            "local files are the source of truth. Run 'coach log' to add missing sessions.[/dim]"
+            "  [dim]coach assess --week reads from data/workouts/ (local files are the source "
+            "of truth). Notes that only exist in Apple Notes won't appear — run 'coach sync' "
+            "first to import them. Edits to existing notes in Apple Notes are not pulled in "
+            "week mode; use 'coach assess --workout' to honor Apple Notes edits for a single "
+            "session.[/dim]"
         )
         return
 

@@ -7,7 +7,7 @@ All notable changes to Exercise Coach are documented here.
 ### Added
 
 - **`coach sync`** — new CLI command that discovers iPhone-created Apple Notes workout entries and syncs them to `data/workouts/` as structured `.md` files. Handles YAML front-matter notes natively and free-form notes via LLM-assisted extraction. Options: `--dry-run` (preview without writing), `--since YYYY-MM-DD` (limit to recent notes).
-- **Auto-sync on assess** — when `auto_sync = true` in config, `coach assess` now syncs new iPhone workouts to disk before processing, so you never assess a stale local state.
+- **Auto-sync on assess** — when `auto_sync = true` in config, `coach assess` imports new Apple Notes workouts to `data/workouts/` before processing. Notes already on disk are not re-fetched; to honor Apple Notes edits for an existing session use `coach assess --workout "title"`, which always reads directly from Notes.
 - **`coach/notes/local.py`** — shared sync engine with slug-collision resolution, date-prefix validation, and atomic file writes (write-then-rename via `.tmp`).
 - **`coach/intelligence/metrics.py`** — extracted `_extract_metrics` and `_apply_metrics` from `assess.py` into a shared module used by both assess and sync.
 - **iPhone workout template** — `coach setup` creates a `Template — Workout` note in Apple Notes as a starting point for iPhone-created workouts.
