@@ -2,6 +2,32 @@
 
 All notable changes to Exercise Coach are documented here.
 
+## [0.6.0] — 2026-06-14
+
+### Added
+
+- **Workout variation engine** — `coach plan` now rotates exercises week-to-week via three mechanisms: an exercise library sampler, a periodization directive, and progressive overload hints extracted from your completed workout history.
+- **Exercise library** (`data/exercise-library/`) — 34 exercises across 6 categories (strength-push, strength-pull, strength-lower, cardio, HIIT, mobility). Each file has equipment tags, sets/reps prescriptions, cues, and progressions. `coach setup` bootstraps the library on first run. Add your own exercises in any category.
+- **ISO-week seeding** — the same week always samples the same exercises from the library. Different weeks rotate automatically. Adding new exercise files redistributes across future weeks with no config needed.
+- **Equipment-aware filtering** — exercises are filtered by your `available_equipment` before sampling. ALL equipment tags on a file must match (e.g. an exercise requiring `[barbell, bumper_plates]` is skipped if you only have `[barbell]`). Bodyweight exercises (empty tag list) always appear.
+- **Periodization directives** — after 4+ consistent training weeks, the prompt receives a progressive overload suggestion. After 3+ weeks with avg RPE ≥ 8.0, it receives a volume-reduction note. These are suppressed if the prior week's assessment already addresses the topic.
+- **Deload signal** — if the last 2 weeks average RPE ≥ 8.5 across 3+ sessions, a deload recommendation is injected into the planning context.
+- **Progressive overload hints** — `parse_exercise_sets()` scans your completed workout sections for load data. Exercises that reached a new personal best get a "+2.5 kg" hint in the planning context.
+- **`ExerciseSet` dataclass and `parse_exercise_sets()`** — new structured parser in `coach/notes/parser.py` that extracts exercise name, sets, reps, and load from free-form completed-workout sections (e.g. `- Floor Press: 4x5 @ 62.5kg`).
+- **`exercise_library` config field** — `[data]` section gains `exercise_library` pointing to the library directory (default `data/exercise-library/`).
+- **Ollama context window discovery** — `OllamaProvider` now reads the native context ceiling from `/api/tags` on startup and clamps `num_ctx` to that ceiling. Raises `InferenceError` when the prompt fills the context window (silent truncation detected post-response). Default `num_ctx` raised from 2048 → 8192.
+- **Ollama JSON format mode** — structured inference calls (plan/assess) now use `format: "json"` for more reliable JSON output.
+
+### Changed
+
+- `coach plan` loads workout history once via `_load_recent_workouts()` and delegates `_load_history_summary()` to it. Prior implementation globbed the workouts directory twice.
+
+### For contributors
+
+- New `tests/commands/test_plan_variation.py` — 28 test cases covering all variation engine functions.
+- New `parse_exercise_sets` cases in `tests/notes/test_parser.py`.
+- Exercise library format documented in `data/examples/exercise-library/CONTRIBUTING.md`.
+
 ## [0.4.1] — 2026-06-13
 
 ### Added

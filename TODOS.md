@@ -4,6 +4,36 @@ Items deferred from v0.1. Each item includes context, motivation, and a starting
 
 ---
 
+## T9 — Python-side web search for exercise discovery (any provider)
+**Priority:** P3 | **Effort:** M (human: ~1.5h / CC: ~15min)
+
+**What:** Extend exercise discovery web search (currently Swift-only, equipment-constraint focused) to work on any provider via Python-side Brave/DuckDuckGo query. Skipped automatically if no API key is configured. Inject top 3-5 results as supplementary exercise options alongside the `data/exercise-library/` block.
+
+**Why:** The local exercise library is finite. Users who train consistently will eventually exhaust it. Web search keeps the option pool fresh without requiring manual library authoring.
+
+**Context:** Deferred from the workout variation CEO review (2026-06-15). Ship the local exercise library first (base scope). Revisit after the library is live and users report they've seen all the exercises. The Brave/DuckDuckGo integration pattern already exists in `coach/intelligence/providers/swift.py` and the `SearchConfig` dataclass is in `coach/config.py`.
+
+**Start:** `coach/commands/plan.py` — add `_search_exercise_options(session_types, equipment, cfg)` that calls Brave or DDG with `"[session_type] exercises [equipment]"`, extracts exercise names from results, and returns a short supplementary block. Gate on `cfg.search.brave_search_api_key or True` (DDG needs no key).
+
+**Depends on:** Local exercise library (base variation scope) shipped first.
+
+---
+
+## T10 — Session type balance enforcer (post-generation hard check)
+**Priority:** P3 | **Effort:** S (human: ~30min / CC: ~5min)
+
+**What:** A post-generation validation check (mirroring the equipment violation check in `_correct_plan_if_needed()`) that fires a correction pass if the generated plan contains more than 2 consecutive sessions of the same subtype (e.g., 3 consecutive strength-push sessions in a 4-day plan).
+
+**Why:** The periodization directive injection (prompt-level) addresses the root cause at generation time. This would be a hard backstop if the LLM ignores the directive. Add only if the directive proves insufficient in practice.
+
+**Context:** Deferred from the workout variation CEO review (2026-06-15). The periodization directive is tried first. If users still report repetitive plans after that ships, add this enforcer as a correction-pass fallback.
+
+**Start:** `coach/commands/plan.py:_correct_plan_if_needed()` — add a `_check_session_type_balance(sessions)` helper that returns violations when subtypes repeat >2 consecutively. Wire into the correction prompt if violations found.
+
+**Depends on:** Periodization directive injection (variation scope base) shipped first.
+
+---
+
 ## T1 — Catch Anthropic SDK exceptions in AnthropicProvider.infer()
 **Priority:** P2 | **Effort:** S (human: ~30min / CC: ~5min)
 
