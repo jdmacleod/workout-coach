@@ -2,6 +2,28 @@
 
 All notable changes to Exercise Coach are documented here.
 
+## [0.7.0] — 2026-06-15
+
+### Added
+
+- **`coach sync`** — new CLI command that discovers iPhone-created Apple Notes workout entries and syncs them to `data/workouts/` as structured `.md` files. Handles YAML front-matter notes natively and free-form notes via LLM-assisted extraction. Options: `--dry-run` (preview without writing), `--since YYYY-MM-DD` (limit to recent notes).
+- **Auto-sync on assess** — when `auto_sync = true` in config, `coach assess` imports new Apple Notes workouts to `data/workouts/` before processing. Notes already on disk are not re-fetched; to honor Apple Notes edits for an existing session use `coach assess --workout "title"`, which always reads directly from Notes.
+- **`coach/notes/local.py`** — shared sync engine with slug-collision resolution, date-prefix validation, and atomic file writes (write-then-rename via `.tmp`).
+- **`coach/intelligence/metrics.py`** — extracted `_extract_metrics` and `_apply_metrics` from `assess.py` into a shared module used by both assess and sync.
+- **iPhone workout template** — `coach setup` creates a `Template — Workout` note in Apple Notes as a starting point for iPhone-created workouts.
+- **`data/examples/workouts/template-iphone.md`** — example showing the minimum front-matter needed for a note to sync cleanly.
+
+### Changed
+
+- `coach assess --dry-run` now skips auto-sync (previously triggered real file writes even in dry-run mode).
+- Rich terminal output in `coach sync` uses `markup=False` / `escape()` for all user-supplied note titles, preventing terminal injection via crafted note names.
+- Slug collision handling warns explicitly when all suffix slots are exhausted rather than silently skipping.
+
+### For contributors
+
+- New `tests/notes/test_local.py` — 13 tests covering sync engine edge cases (collision, invalid date, empty slug, free-form parse fallback).
+- New `tests/commands/test_sync.py` — 7 CLI tests (happy path, dry-run, --since filter, error exits).
+
 ## [0.6.0] — 2026-06-14
 
 ### Added
