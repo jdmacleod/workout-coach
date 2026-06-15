@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from rich.console import Console
+from rich.markup import escape
 
 from coach.config import Config, resolve_data_path
 from coach.intelligence.prompts import extract_json_text
@@ -17,7 +18,15 @@ from coach.intelligence.provider import InferenceProvider, InferenceRequest
 from coach.models.workout import Workout
 from coach.notes.client import NotesClient
 from coach.notes.exceptions import NotesClientError
-from coach.notes.parser import render_workout_note, workout_from_note
+from coach.notes.parser import (
+    _COMPLETED_PLACEHOLDER_MD,
+    _COMPLETED_PLACEHOLDER_NOTES,
+    _HOW_WENT_PLACEHOLDER_MD,
+    _HOW_WENT_PLACEHOLDER_NOTES,
+    parse_sections,
+    render_workout_note,
+    workout_from_note,
+)
 from coach.notes.schema import FOLDER_WORKOUTS, safe_slug
 
 console = Console()
@@ -39,6 +48,72 @@ _VALID_WORKOUT_TYPES = {"strength", "cardio", "hiit", "mobility", "rest"}
 _SLUG_MAX_LEN = 40
 _MAX_COLLISION_SUFFIX = 99
 _WORKOUT_TEMPLATE_TITLE = "Template — Workout"
+
+_PLACEHOLDER_STRINGS: frozenset[str] = frozenset(
+    {
+        _COMPLETED_PLACEHOLDER_MD,
+        _HOW_WENT_PLACEHOLDER_MD,
+        _COMPLETED_PLACEHOLDER_NOTES,
+        _HOW_WENT_PLACEHOLDER_NOTES,
+    }
+)
+
+
+def _is_placeholder_or_empty(text: str | None) -> bool:
+    if not text or not text.strip():
+        return True
+    return text.strip() in _PLACEHOLDER_STRINGS
+
+
+def _maybe_update_local(
+    local_path: Path,
+    title: str,
+    client: NotesClient,
+    workouts_dir: Path,
+    *,
+    dry_run: bool = False,
+) -> tuple[bool, str]:
+    """Fetch note from Apple Notes, compare to local, update if Notes has completion
+    content the local file lacks.
+
+    Returns (updated, label): updated=True when the file was written (or would be in
+    dry-run mode), False when local already has real content or Notes is empty.
+    """
+    notes_content = client.get_note(FOLDER_WORKOUTS, title)
+    notes_sections = parse_sections(notes_content)
+
+    local_text = local_path.read_text()
+    local_workout = workout_from_note(local_text, title)
+
+    notes_completed = notes_sections.get("Completed", "")
+    notes_how_went = notes_sections.get("How It Went", "")
+    local_completed = local_workout.completed_content or ""
+    local_how_went = local_workout.how_it_went or ""
+
+    completed_needs_update = not _is_placeholder_or_empty(
+        notes_completed
+    ) and _is_placeholder_or_empty(local_completed)
+    how_went_needs_update = not _is_placeholder_or_empty(
+        notes_how_went
+    ) and _is_placeholder_or_empty(local_how_went)
+
+    if not completed_needs_update and not how_went_needs_update:
+        return (False, "already current")
+
+    if dry_run:
+        return (True, "would update")
+
+    updates: dict[str, Any] = {}
+    if completed_needs_update:
+        updates["completed_content"] = notes_completed
+        if local_workout.status == "planned":
+            updates["status"] = "completed"
+    if how_went_needs_update:
+        updates["how_it_went"] = notes_how_went
+
+    updated_workout = dataclasses.replace(local_workout, **updates)
+    _write_local_workout(workouts_dir, updated_workout, dest=local_path)
+    return (True, "updated")
 
 
 def _write_local_workout(workouts_dir: Path, workout: Workout, *, dest: Path | None = None) -> None:
@@ -96,8 +171,6 @@ def _parse_free_form(
 
             return dataclasses.replace(base, **updates)
         except (json.JSONDecodeError, ValueError, KeyError, TypeError, AttributeError):
-            from rich.markup import escape
-
             console.print(
                 f"[dim]Warning: LLM parse failed for '{escape(title)}' — using best-effort parse.[/dim]"
             )
@@ -115,15 +188,18 @@ def _sync_notes(
     verbose: bool = True,
     provider: InferenceProvider | None = None,
     dry_run: bool = False,
-) -> int:
+) -> tuple[int, int]:
     """Discover workout notes in Apple Notes and sync unsynced ones to local .md files.
 
-    Returns the count of notes synced (or that would be synced in dry-run mode).
+    Returns (imported, updated): count of new notes written and existing notes updated
+    with iPhone edits (or that would be, in dry-run mode).
     """
     workouts_dir = resolve_data_path(cfg, "workouts_dir")
     titles = client.list_notes(FOLDER_WORKOUTS)
 
-    synced = 0
+    imported = 0
+    updated = 0
+    already_current = 0
     written_this_run: set[str] = set()
     # Collect rows for verbose table: (title, path_display, label)
     rows: list[tuple[str, str, str]] = []
@@ -174,8 +250,6 @@ def _sync_notes(
                     resolved = True
                     break
             if not resolved:
-                from rich.markup import escape
-
                 console.print(
                     f"[yellow]  Warning: skipping '{escape(title)}' — "
                     f"too many notes with the same date/slug[/yellow]"
@@ -183,7 +257,31 @@ def _sync_notes(
                 continue
 
         if local_path.exists():
-            rows.append((title, f"{workouts_dir_rel}/{filename}", "already local"))
+            # Performance gate: skip update check if already assessed
+            try:
+                local_text = local_path.read_text()
+                local_status = workout_from_note(local_text, title).status
+            except (OSError, ValueError):
+                local_status = "completed"
+
+            if local_status == "completed":
+                rows.append((title, f"{workouts_dir_rel}/{filename}", "already local"))
+                continue
+
+            # Update gate: check if Notes has completion content local file lacks
+            try:
+                did_update, label = _maybe_update_local(
+                    local_path, title, client, workouts_dir, dry_run=dry_run
+                )
+                if did_update:
+                    updated += 1
+                    rows.append((title, f"{workouts_dir_rel}/{filename}", label))
+                else:
+                    already_current += 1
+            except (NotesClientError, OSError, ValueError) as exc:
+                console.print(
+                    f"[yellow]  Warning: skipping '{escape(title)}' — {escape(str(exc))}[/yellow]"
+                )
             continue
 
         # Pull content and write
@@ -201,24 +299,26 @@ def _sync_notes(
                 _write_local_workout(workouts_dir, workout, dest=local_path)
 
             written_this_run.add(filename)
-            synced += 1
+            imported += 1
             label = "would sync" if dry_run else "synced"
             rows.append((title, f"{workouts_dir_rel}/{filename}", label))
 
         except (NotesClientError, OSError, ValueError, json.JSONDecodeError) as exc:
-            from rich.markup import escape
-
             console.print(
                 f"[yellow]  Warning: skipping '{escape(title)}' — {escape(str(exc))}[/yellow]"
             )
             continue
 
     if verbose:
-        console.print(f"Found {len(titles)} note(s) in Apple Notes, {synced} unsynced:")
+        console.print(
+            f"Found {len(titles)} note(s) in Apple Notes, {imported} new, {updated} updated:"
+        )
         for title, path, label in rows:
             if path:
                 console.print(f"  → {title}  → {path}  [{label}]", markup=False)
             else:
                 console.print(f"  → {title}  [{label}]", markup=False)
+        if already_current > 0:
+            console.print(f"  ({already_current} already current)")
 
-    return synced
+    return (imported, updated)

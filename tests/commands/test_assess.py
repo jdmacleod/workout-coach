@@ -272,6 +272,39 @@ def test_sync_auto_sync_notes_down(tmp_path):
     assert mock_list.call_count == 1
 
 
+def test_auto_sync_prints_updated_count_separately(tmp_path):
+    """_sync_notes returning (0, 1) → message with count and 'update' printed."""
+    from unittest.mock import patch
+
+    from coach.commands.assess import _run_assess
+
+    cfg = _make_config(str(tmp_path))
+    cfg.notes.auto_sync = True
+
+    provider = MockInferenceProvider(response_text=MOCK_ASSESS_RESPONSE)
+    mock_client = MockNotesClient()
+    today = datetime.date.today()
+    iso = today.isocalendar()
+    week_str = f"{iso.year}-W{iso.week:02d}"
+
+    with (
+        patch("coach.commands.assess._sync_notes", return_value=(0, 1)) as mock_sync,
+        patch("coach.commands.assess.load_config", return_value=cfg),
+        patch("coach.commands.assess.console") as mock_console,
+    ):
+        _run_assess(
+            workout_title=None,
+            week=week_str,
+            dry_run=True,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    mock_sync.assert_called_once()
+    printed = " ".join(str(c) for c in mock_console.print.call_args_list)
+    assert "1" in printed and "update" in printed.lower()
+
+
 def test_sync_auto_sync_config_disabled(tmp_path):
     """When auto_sync=False, _sync_notes is never called during assess."""
     from coach.commands.assess import _run_assess

@@ -90,9 +90,14 @@ def _run_assess(
 
     if cfg.notes.auto_sync:
         try:
-            synced = _sync_notes(cfg, client, verbose=False, provider=provider, dry_run=dry_run)
-            if synced > 0:
-                console.print(f"[dim]Imported {synced} new note(s) from Apple Notes.[/dim]")
+            imported, updated = _sync_notes(
+                cfg, client, verbose=False, provider=provider, dry_run=dry_run
+            )
+            if imported > 0:
+                console.print(f"[dim]Imported {imported} new note(s) from Apple Notes.[/dim]")
+            if updated > 0:
+                verb = "Would update" if dry_run else "Updated"
+                console.print(f"[dim]{verb} {updated} note(s) with iPhone edits.[/dim]")
         except (NotesClientError, OSError):
             console.print(
                 "[dim]Warning: Apple Notes unavailable — skipping auto-sync. "
