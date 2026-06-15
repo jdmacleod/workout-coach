@@ -4,9 +4,6 @@ from __future__ import annotations
 
 import datetime
 from pathlib import Path
-from typing import Any
-
-import pytest
 
 from coach.commands.plan import (
     _build_overload_hints,
@@ -207,8 +204,12 @@ def test_overload_hints_consistent_load_emits_hint():
 def test_overload_hints_bodyweight_exercise_ignored():
     today = datetime.date.today()
     workouts = [
-        _make_workout(date=today - datetime.timedelta(weeks=2), completed_content="- Pull-ups: 4x8"),
-        _make_workout(date=today - datetime.timedelta(weeks=1), completed_content="- Pull-ups: 4x9"),
+        _make_workout(
+            date=today - datetime.timedelta(weeks=2), completed_content="- Pull-ups: 4x8"
+        ),
+        _make_workout(
+            date=today - datetime.timedelta(weeks=1), completed_content="- Pull-ups: 4x9"
+        ),
     ]
     assert _build_overload_hints(workouts) == ""
 
@@ -291,7 +292,7 @@ def _write_exercise(path: Path, name: str, equipment: list[str], category: str) 
         f"""\
 ---
 name: {name}
-equipment: [{', '.join(equipment)}]
+equipment: [{", ".join(equipment)}]
 type: {category}
 difficulty: beginner
 ---
