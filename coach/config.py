@@ -45,8 +45,10 @@ class LLMOllamaConfig:
     max_tokens: int = 2048
     # num_ctx sets the context window at the Ollama server level when the model
     # is loaded. Must be >= max_tokens. Ollama's server default is often 2048
-    # even for models that support much larger windows (e.g. llama3.2 → 128K).
-    num_ctx: int = 2048
+    # even for models that support much larger windows (e.g. qwen2.5:14b → 32K,
+    # llama3.2 → 128K). The planning + correction call needs ~2K tokens of context;
+    # 8192 gives headroom for larger training-info files and long history summaries.
+    num_ctx: int = 8192
 
 
 @dataclass

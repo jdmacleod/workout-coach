@@ -625,7 +625,8 @@ def _correct_plan_if_needed(
         violations = _check_equipment_violations(result.get("sessions", []), equipment)
         if violations:
             console.print(
-                "[yellow]Warning: plan still has equipment violations after correction:[/yellow]"
+                "[yellow]Warning: LLM correction did not fully fix equipment violations "
+                "(Python scrubbing will handle these):[/yellow]"
             )
             for v in violations:
                 console.print(f"  [yellow]• {v}[/yellow]")

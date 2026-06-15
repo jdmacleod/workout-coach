@@ -36,12 +36,14 @@ shortcut_prefix = "EC-"
 [llm.ollama]
 base_url  = "http://localhost:11434"
 model     = "llama3.2"
-# max_tokens caps output tokens per call. num_ctx sets the server-side context window
-# when the model is loaded — Ollama's default is often 2048 even for models that
-# support much larger windows (llama3.2 supports up to 128K). Increase num_ctx if
-# your model supports it and you need more context. num_ctx must be >= max_tokens.
+# max_tokens caps output tokens per call (plan JSON fits in ~700 tokens; 2048 is enough).
+# num_ctx sets the server-side context window when the model is loaded — Ollama's
+# server default is often 2048 even for models that support much larger windows
+# (qwen2.5:14b → 32K, llama3.2 → 128K). The planning prompt + correction pass needs
+# ~2K input tokens; 8192 leaves headroom for larger training-info files and history.
+# num_ctx must be >= max_tokens. Increase if prompts are being truncated.
 max_tokens = 2048
-num_ctx    = 2048
+num_ctx    = 8192
 
 [llm.llamacpp]
 server_url = "http://localhost:8080"

@@ -149,8 +149,13 @@ ASSESS_USER = """
 ## Extraction Notes
 - rpe: Rate of Perceived Exertion on a 1–10 scale.
   1=trivially easy, 5=moderate, 7=challenging, 8=hard, 9=very hard, 10=maximal effort.
-  Infer from descriptions: "smooth"→6–7, "grinder"→8–9, "easy"→4–5, "tough"→7–8.
-  If no effort cues are present, return null.
+  ALWAYS infer from How It Went language even if Completed loads look heavy:
+    "easy" / "nice and easy" / "no problem" → 4–5
+    "smooth" / "felt good" / "went well" → 6–7
+    "tough" / "hard" / "struggled" → 7–8
+    "grinder" / "brutal" / "maximal" → 8–10
+    "active recovery" or "deload" descriptors → treat as easy (4–5).
+  Return null only if How It Went is completely absent or contains zero effort language.
 
 ## Response Schema
 {assess_schema}

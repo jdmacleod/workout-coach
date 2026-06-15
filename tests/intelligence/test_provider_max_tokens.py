@@ -82,7 +82,31 @@ def _capture_swift_payload(cfg: Config, request: InferenceRequest) -> dict:
     return json.loads(captured[0])
 
 
-def _capture_ollama_payload(cfg: Config, request: InferenceRequest) -> dict:
+def _make_ollama_get_mock(model_name: str, context_length: int = 32768):
+    """Return a fake httpx.get response for Ollama's /api/tags endpoint."""
+    from unittest.mock import MagicMock
+
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status.return_value = None
+    mock_resp.json.return_value = {
+        "models": [
+            {
+                "name": model_name,
+                "model": model_name,
+                "details": {"context_length": context_length},
+            }
+        ]
+    }
+    return mock_resp
+
+
+def _capture_ollama_payload(
+    cfg: Config,
+    request: InferenceRequest,
+    *,
+    native_ctx: int = 32768,
+    prompt_tokens: int = 5,
+) -> dict:
     from unittest.mock import MagicMock
 
     from coach.intelligence.providers.ollama import OllamaProvider
@@ -94,10 +118,23 @@ def _capture_ollama_payload(cfg: Config, request: InferenceRequest) -> dict:
         captured.append(json)
         mock_resp = MagicMock()
         mock_resp.raise_for_status.return_value = None
-        mock_resp.json.return_value = {"choices": [{"message": {"content": "ok"}}]}
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": "ok"}}],
+            "usage": {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": 1,
+                "total_tokens": prompt_tokens + 1,
+            },
+        }
         return mock_resp
 
-    with patch("coach.intelligence.providers.ollama.httpx.post", side_effect=fake_post):
+    def fake_get(url: str, timeout: int):
+        return _make_ollama_get_mock(cfg.llm.ollama.model, native_ctx)
+
+    with (
+        patch("coach.intelligence.providers.ollama.httpx.post", side_effect=fake_post),
+        patch("coach.intelligence.providers.ollama.httpx.get", side_effect=fake_get),
+    ):
         provider.infer(request)
 
     return captured[0]
@@ -136,7 +173,7 @@ def test_config_defaults_swift() -> None:
 def test_config_defaults_ollama() -> None:
     cfg = LLMOllamaConfig()
     assert cfg.max_tokens == 2048
-    assert cfg.num_ctx == 2048
+    assert cfg.num_ctx == 8192
 
 
 def test_config_defaults_llamacpp() -> None:
@@ -167,7 +204,7 @@ def test_ollama_config_defaults_when_not_in_toml() -> None:
     raw = {"llm": {"provider": "ollama", "ollama": {"model": "llama3.2"}}}
     cfg = _parse_config(raw)
     assert cfg.llm.ollama.max_tokens == 2048
-    assert cfg.llm.ollama.num_ctx == 2048
+    assert cfg.llm.ollama.num_ctx == 8192
 
 
 # ── Tests 3-4: _validate_max_tokens raises ConfigError for invalid values ──────
@@ -287,6 +324,126 @@ def test_ollama_clamps_request_above_config_limit() -> None:
     cfg = _ollama_config(max_tokens=512, num_ctx=2048)
     payload = _capture_ollama_payload(cfg, InferenceRequest(system="s", user="u", max_tokens=2048))
     assert payload["max_tokens"] == 512
+
+
+# ── Ollama context window discovery and overflow detection ────────────────────
+
+
+def test_ollama_native_ctx_cached_from_api_tags() -> None:
+    """_cache_native_ctx populates _native_ctx from /api/tags details.context_length."""
+
+    from coach.intelligence.providers.ollama import OllamaProvider
+
+    cfg = _ollama_config(num_ctx=8192)
+    provider = OllamaProvider(cfg)
+    assert provider._native_ctx is None
+
+    mock_resp = _make_ollama_get_mock(cfg.llm.ollama.model, context_length=32768)
+    with patch("coach.intelligence.providers.ollama.httpx.get", return_value=mock_resp):
+        available = provider.is_available()
+
+    assert available is True
+    assert provider._native_ctx == 32768
+
+
+def test_ollama_native_ctx_falls_back_to_num_ctx_when_api_unavailable() -> None:
+    """_get_native_ctx falls back to configured num_ctx when /api/tags is unreachable."""
+    from coach.intelligence.providers.ollama import OllamaProvider
+
+    cfg = _ollama_config(num_ctx=4096)
+    provider = OllamaProvider(cfg)
+
+    with patch(
+        "coach.intelligence.providers.ollama.httpx.get",
+        side_effect=Exception("connection refused"),
+    ):
+        ctx = provider._get_native_ctx()
+
+    assert ctx == 4096
+
+
+def test_ollama_num_ctx_clamped_to_native_ceiling() -> None:
+    """num_ctx in the payload never exceeds the model's native context length."""
+    # Configure num_ctx=16384 but the model only supports 8192
+    cfg = _ollama_config(max_tokens=512, num_ctx=16384)
+    payload = _capture_ollama_payload(
+        cfg,
+        InferenceRequest(system="s", user="u", max_tokens=512),
+        native_ctx=8192,
+    )
+    assert payload["options"]["num_ctx"] == 8192
+
+
+def test_ollama_raises_inference_error_on_context_overflow() -> None:
+    """InferenceError is raised when actual prompt_tokens >= num_ctx (overflow detected)."""
+    from unittest.mock import MagicMock
+
+    from coach.intelligence.exceptions import InferenceError
+    from coach.intelligence.providers.ollama import OllamaProvider
+
+    cfg = _ollama_config(max_tokens=512, num_ctx=1024)
+    provider = OllamaProvider(cfg)
+
+    def fake_post(url: str, *, json: dict, timeout: int):
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status.return_value = None
+        # prompt_tokens equals num_ctx — overflow occurred
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": "truncated"}}],
+            "usage": {"prompt_tokens": 1024, "completion_tokens": 5, "total_tokens": 1029},
+        }
+        return mock_resp
+
+    with (
+        patch(
+            "coach.intelligence.providers.ollama.httpx.get",
+            return_value=_make_ollama_get_mock(cfg.llm.ollama.model, 32768),
+        ),
+        patch("coach.intelligence.providers.ollama.httpx.post", side_effect=fake_post),
+        pytest.raises(InferenceError, match="context overflow"),
+    ):
+        provider.infer(InferenceRequest(system="s", user="u", max_tokens=512))
+
+
+def test_ollama_no_overflow_error_when_usage_absent() -> None:
+    """No error is raised when the response lacks a usage field (older Ollama versions)."""
+    from unittest.mock import MagicMock
+
+    from coach.intelligence.providers.ollama import OllamaProvider
+
+    cfg = _ollama_config(max_tokens=512, num_ctx=2048)
+    provider = OllamaProvider(cfg)
+
+    def fake_post(url: str, *, json: dict, timeout: int):
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status.return_value = None
+        mock_resp.json.return_value = {"choices": [{"message": {"content": "ok"}}]}
+        return mock_resp
+
+    with (
+        patch(
+            "coach.intelligence.providers.ollama.httpx.get",
+            return_value=_make_ollama_get_mock(cfg.llm.ollama.model, 32768),
+        ),
+        patch("coach.intelligence.providers.ollama.httpx.post", side_effect=fake_post),
+    ):
+        resp = provider.infer(InferenceRequest(system="s", user="u", max_tokens=512))
+
+    assert resp.text == "ok"
+
+
+def test_ollama_no_overflow_error_when_prompt_tokens_below_num_ctx() -> None:
+    """No error is raised when prompt_tokens is safely below num_ctx."""
+    cfg = _ollama_config(max_tokens=512, num_ctx=4096)
+    # prompt_tokens=100 is well below num_ctx=4096 → no overflow
+    payload = _capture_ollama_payload(
+        cfg,
+        InferenceRequest(system="s", user="u", max_tokens=512),
+        native_ctx=32768,
+        prompt_tokens=100,
+    )
+    # If we get here without an exception, the test passes
+    assert payload["options"]["num_ctx"] == 4096
 
 
 # ── llamacpp clamping ──────────────────────────────────────────────────────────
