@@ -229,7 +229,9 @@ end tell
         setup = "\n".join(_folder_script_lines(folder, account_esc))
         script = f"""tell application "Notes"
 {setup}
-    set noteNames to name of every note of targetFolder
+    set AppleScript's text item delimiters to "\\n"
+    set noteNames to name of every note of targetFolder as string
+    set AppleScript's text item delimiters to ""
     return noteNames
 end tell
 """
@@ -239,8 +241,8 @@ end tell
             if _is_not_found_error(e):
                 return []
             raise
-        titles = raw.split(", ") if raw else []
-        return [t for t in titles if t]
+        titles = raw.split("\n") if raw else []
+        return [t.strip() for t in titles if t.strip()]
 
     def delete_note(self, folder: str, title: str) -> None:
         """Delete a note by title. Raises NoteNotFoundError if absent."""

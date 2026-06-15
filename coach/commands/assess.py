@@ -3,36 +3,30 @@
 from __future__ import annotations
 
 import datetime
-import json
 from pathlib import Path
-from typing import Annotated, Any, cast
+from typing import Annotated, Any
 
 import typer
 from rich.console import Console
 
 from coach.config import Config, ConfigNotFoundError, load_config, resolve_data_path
-from coach.intelligence.exceptions import InferenceError, InferenceParseError
+from coach.intelligence.exceptions import InferenceError
+from coach.intelligence.metrics import _apply_metrics, _extract_metrics
 from coach.intelligence.prompts import (
-    ASSESS_SCHEMA,
-    ASSESS_SCHEMA_DICT,
-    ASSESS_SYSTEM,
-    ASSESS_USER,
-    JSON_PARSE_CORRECTION,
     NEXT_WEEK_NOTES_SYSTEM,
     NEXT_WEEK_NOTES_USER,
     WEEKLY_SUMMARY_SYSTEM,
     WEEKLY_SUMMARY_USER,
-    extract_json_text,
 )
 from coach.intelligence.provider import InferenceProvider, InferenceRequest, get_provider
 from coach.models.workout import Workout
 from coach.notes.client import NotesClient
 from coach.notes.exceptions import NoteNotFoundError, NotesClientError
+from coach.notes.local import _sync_notes, _write_local_workout
 from coach.notes.parser import (
     parse_sections,
     render_assessment_note,
     render_assessment_note_html,
-    render_workout_note,
     render_workout_note_html,
     workout_from_note,
 )
@@ -40,7 +34,6 @@ from coach.notes.schema import (
     FOLDER_ASSESSMENTS,
     FOLDER_WORKOUTS,
     assessment_note_title,
-    safe_slug,
 )
 
 console = Console()
@@ -94,6 +87,17 @@ def _run_assess(
     client = notes_client or NotesClient(account=cfg.notes.account, root_folder=cfg.notes.folder)
     provider = inference_provider or get_provider(cfg)
     console.print(f"[dim]{provider.display_name()}[/dim]")
+
+    if cfg.notes.auto_sync:
+        try:
+            synced = _sync_notes(cfg, client, verbose=False, provider=provider, dry_run=dry_run)
+            if synced > 0:
+                console.print(f"[dim]Synced {synced} note(s) from Apple Notes.[/dim]")
+        except (NotesClientError, OSError):
+            console.print(
+                "[dim]Warning: Apple Notes unavailable — skipping auto-sync. "
+                "Run 'coach sync' manually.[/dim]"
+            )
 
     if workout_title:
         _assess_single(cfg, client, provider, workout_title, dry_run=dry_run)
@@ -297,71 +301,6 @@ def _assess_week(
     )
     console.print("\n[bold]Next Week Notes:[/bold]")
     console.print(f"  {next_week_notes}")
-
-
-def _extract_metrics(provider: InferenceProvider, workout: Workout) -> dict[str, Any]:
-    """Call LLM to extract metrics from a workout note. Returns parsed JSON dict."""
-
-    metadata = (
-        f"type: {workout.type}, subtype: {workout.subtype or '-'}, "
-        f"duration_planned: {workout.duration_planned or '-'} min"
-    )
-    user = ASSESS_USER.format(
-        metadata=metadata,
-        completed=workout.completed_content or "(empty)",
-        how_it_went=workout.how_it_went or "(empty)",
-        assess_schema=ASSESS_SCHEMA,
-    )
-    req = InferenceRequest(
-        system=ASSESS_SYSTEM, user=user, max_tokens=1500, schema=ASSESS_SCHEMA_DICT
-    )
-    resp = provider.infer(req)
-
-    try:
-        return cast(dict[str, Any], json.loads(extract_json_text(resp.text)))
-    except json.JSONDecodeError:
-        # One retry
-        correction = JSON_PARSE_CORRECTION.format(
-            previous_response=resp.text[:500], schema=ASSESS_SCHEMA
-        )
-        retry_req = InferenceRequest(system=ASSESS_SYSTEM, user=correction, max_tokens=1500)
-        retry_resp = provider.infer(retry_req)
-        try:
-            return cast(dict[str, Any], json.loads(extract_json_text(retry_resp.text)))
-        except json.JSONDecodeError as e:
-            raise InferenceParseError(f"Could not parse assessment JSON: {e}") from e
-
-
-def _apply_metrics(workout: Workout, result: dict[str, Any]) -> Workout:
-    """Return a new Workout with extracted metrics applied."""
-    import dataclasses
-
-    updates: dict[str, Any] = {}
-    if "status" in result:
-        updates["status"] = result["status"]
-    if result.get("rpe") is not None:
-        updates["rpe"] = float(result["rpe"])
-    if result.get("mood"):
-        updates["mood"] = result["mood"]
-    if result.get("soreness"):
-        updates["soreness"] = result["soreness"]
-    if result.get("duration_actual") is not None:
-        updates["duration_actual"] = int(result["duration_actual"])
-    if result.get("summary"):
-        updates["how_it_went"] = result["summary"]
-
-    return dataclasses.replace(workout, **updates)
-
-
-def _write_local_workout(workouts_dir: Path, workout: Workout) -> None:
-    """Write updated workout front matter + body to local file."""
-    workouts_dir.mkdir(parents=True, exist_ok=True)
-    title = workout.note_title or workout.id
-    title_suffix = title.removeprefix(workout.date.isoformat() + " ")
-    slug = safe_slug(title_suffix)
-    filename = f"{workout.date.isoformat()}-{slug[:40]}.md"
-    path = workouts_dir / filename
-    path.write_text(render_workout_note(workout))
 
 
 def _load_week_workouts(workouts_dir: Path, week: str) -> list[Workout]:

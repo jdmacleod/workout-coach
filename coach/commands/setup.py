@@ -237,8 +237,26 @@ def _show_provider_table() -> None:
         )
 
 
+_WORKOUT_TEMPLATE_TITLE = "Template — Workout"
+
+_WORKOUT_TEMPLATE_BODY = """\
+---
+id: wrk-YYYYMMDD-001
+date: YYYY-MM-DD
+type: strength
+status: completed
+duration_actual:
+rpe:
+---
+
+## Completed
+
+## How It Went
+"""
+
+
 def _setup_notes_folders() -> None:
-    """Create Apple Notes folder structure."""
+    """Create Apple Notes folder structure and template note."""
     try:
         from coach.notes.client import NotesClient
         from coach.notes.schema import (
@@ -253,6 +271,13 @@ def _setup_notes_folders() -> None:
         for folder in (FOLDER_ROOT, FOLDER_PLANS, FOLDER_WORKOUTS, FOLDER_ASSESSMENTS):
             client.ensure_folder(folder)
             console.print(f"  [green]✓[/green] {folder}")
+
+        if not client.note_exists(FOLDER_WORKOUTS, _WORKOUT_TEMPLATE_TITLE):
+            client.create_note(FOLDER_WORKOUTS, _WORKOUT_TEMPLATE_TITLE, _WORKOUT_TEMPLATE_BODY)
+            console.print(
+                f"  [green]✓[/green] Created '{_WORKOUT_TEMPLATE_TITLE}' in Workouts — "
+                "duplicate this note on iPhone to log workouts"
+            )
     except ConfigNotFoundError:
         pass  # config not yet written; skip Notes setup
     except NotesClientError as e:
