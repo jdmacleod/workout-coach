@@ -6,6 +6,7 @@ config/*.ics
 
 # === User data ===
 data/training-info.md
+data/exercise-library/
 data/workouts/
 data/plans/
 data/assessments/

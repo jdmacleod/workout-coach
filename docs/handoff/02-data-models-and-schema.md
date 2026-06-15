@@ -304,5 +304,26 @@ def render_plan_note(plan: WeeklyPlan) -> str:
 def workout_from_note(content: str, title: str) -> Workout:
     """Parse a workout note into a Workout dataclass."""
     ...
+
+def parse_exercise_sets(completed_text: str) -> list[ExerciseSet]:
+    """Parse free-form completed-workout text into ExerciseSet objects.
+
+    Matches lines like '- Floor Press: 4x5 @ 62.5kg'. Returns one
+    ExerciseSet per matched line; non-matching lines are silently skipped.
+    """
+    ...
+```
+
+```python
+# coach/notes/parser.py — ExerciseSet dataclass
+from dataclasses import dataclass
+
+@dataclass
+class ExerciseSet:
+    name: str
+    sets: int
+    reps: int | None      # None for AMRAP / Max / Failure rep schemes
+    load_kg: float | None # None for bodyweight exercises (no @ load)
+    load_str: str         # raw load string as written (e.g. "62.5kg"), "" if absent
 ```
 

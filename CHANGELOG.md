@@ -28,6 +28,45 @@ All notable changes to Exercise Coach are documented here.
 - New `parse_exercise_sets` cases in `tests/notes/test_parser.py`.
 - Exercise library format documented in `data/examples/exercise-library/CONTRIBUTING.md`.
 
+## [0.5.0] — 2026-06-13
+
+### Added
+
+- **Per-provider `max_tokens` config** — each `[llm.*]` section now accepts a `max_tokens` key so output token limits can be tuned per-provider without touching code. Provider defaults: Swift 2048, Ollama 2048, llama.cpp 2048, Anthropic 4096.
+- **`num_ctx` config for Ollama** — `[llm.ollama]` gains `num_ctx` (default 8192) to set the server-side context window when loading the model, overriding Ollama's own default of 2048.
+
+### Fixed
+
+- **Reasoning channel stripping** — some models (Ollama + reasoning-capable variants) return `<think>…</think>` blocks or `reasoning_content` fields before the JSON response. These are now stripped before JSON parse so the response is clean regardless of model.
+
+---
+
+## [0.4.3] — 2026-06-13
+
+### Fixed
+
+- **GenerationError -1 on Ollama** — fixed a bug where Ollama returned `"done_reason": "length"` (context overflow) that manifested as `GenerationError -1`. The provider now raises `InferenceError` with a clear message instead of a cryptic code.
+- **Planning constraint enforcement** — `available_equipment` and `max_session_duration_minutes` constraints are now re-injected into the correction prompt verbatim, so the self-correction pass reliably fixes violations on the second attempt.
+- **Session count trim** — `coach status` no longer double-counts sessions when both a plan file and a workout stub exist for the same date.
+- **Next-week notes header stripping** — the `## Next Week Notes` heading is stripped before injection into the planning prompt so it doesn't duplicate the section header in the prompt template.
+- **Plan retry on JSON parse failure** — `coach plan` now retries the LLM call once on `JSONDecodeError` before exiting, recovering from transient malformed responses.
+
+---
+
+## [0.4.2] — 2026-06-12
+
+### Added
+
+- **13-week usability simulation** — `uv run pytest tests/ -m usability` runs a synthetic 13-week end-to-end simulation with a `MockInferenceProvider`, writing output to `usability-output/`. Validates plan → workout → assess → plan cycles at scale without requiring a live LLM or Apple Notes.
+- **Usability live mode** — `uv run pytest tests/ -m usability_live` runs the same simulation with a real inference provider (slow; writes to `usability-output/live/`).
+
+### Fixed
+
+- **LLM plan quality** — tightened the planning prompt's session subtype taxonomy and constraints section; reduced cases where the model produced vague subtypes or skipped rationale fields.
+- **Context window overflow in web search** — the Swift two-phase web search + plan generation path now truncates search results before appending them to avoid overflowing the Foundation Models context window.
+
+---
+
 ## [0.4.1] — 2026-06-13
 
 ### Added

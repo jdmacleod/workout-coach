@@ -45,6 +45,7 @@ structure, and validates the configured inference provider.
    - Equipment available
    - Injury notes
    - Recurring external classes (day, time, type, duration)
+4b. Bootstrap exercise library: copy `data/examples/exercise-library/` → `data/exercise-library/` if it does not already exist.
 5. Probe inference providers; display availability table; prompt user to select default.
 6. If Swift provider selected: offer to build the binary.
 7. If Google Calendar selected: run OAuth flow; save token to `config/google-token.json`.
@@ -120,6 +121,11 @@ USER:
 
 ## Training Philosophy and Example Workouts
 <training-info.md content>
+
+{exercise_options}
+<variation signals: exercise library sample (filtered by equipment, seeded by ISO week),
+ periodization directive (overload or volume-reduction note based on history),
+ progressive overload hints (exercises at new PB get a +2.5 kg nudge)>
 
 ## Recent History (last 4 weeks)
 <file-based summary: workout types, avg RPE, completion rate, volume>

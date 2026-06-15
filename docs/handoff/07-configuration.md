@@ -72,10 +72,11 @@ folder  = "Exercise Coach"    # Root folder; subfolders are created by setup
 # All paths are relative to the project root.
 
 [data]
-training_info   = "data/training-info.md"
-workouts_dir    = "data/workouts/"
-plans_dir       = "data/plans/"
-assessments_dir = "data/assessments/"
+training_info    = "data/training-info.md"
+workouts_dir     = "data/workouts/"
+plans_dir        = "data/plans/"
+assessments_dir  = "data/assessments/"
+exercise_library = "data/exercise-library/"
 
 # ── Calendar Integration ──────────────────────────────────────────────────────
 
@@ -181,6 +182,7 @@ class DataConfig:
     workouts_dir: str = "data/workouts/"
     plans_dir: str = "data/plans/"
     assessments_dir: str = "data/assessments/"
+    exercise_library: str = "data/exercise-library/"
 
 @dataclass
 class CalendarGoogleConfig:

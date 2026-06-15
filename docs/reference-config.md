@@ -164,10 +164,11 @@ All paths are relative to the project root.
 
 ```toml
 [data]
-training_info   = "data/training-info.md"
-workouts_dir    = "data/workouts/"
-plans_dir       = "data/plans/"
-assessments_dir = "data/assessments/"
+training_info    = "data/training-info.md"
+workouts_dir     = "data/workouts/"
+plans_dir        = "data/plans/"
+assessments_dir  = "data/assessments/"
+exercise_library = "data/exercise-library/"
 ```
 
 | Key | Type | Default | Description |
@@ -176,6 +177,7 @@ assessments_dir = "data/assessments/"
 | `workouts_dir` | string | `data/workouts/` | Directory for local workout note copies. Mirrored from Apple Notes. |
 | `plans_dir` | string | `data/plans/` | Directory for local plan copies (one file per week: `YYYY-Www.md`). |
 | `assessments_dir` | string | `data/assessments/` | Directory for local assessment copies. |
+| `exercise_library` | string | `data/exercise-library/` | Root directory of the exercise library. `coach setup` bootstraps this from `data/examples/exercise-library/` on first run. Add subdirectories and `.md` files to expand the pool. |
 
 ---
 

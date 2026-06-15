@@ -53,6 +53,7 @@ You'll be asked:
 Setup also:
 - Creates `config/config.toml` from the example
 - Creates `data/workouts/`, `data/plans/`, `data/assessments/`
+- Bootstraps `data/exercise-library/` from the included example library (34 exercises across 6 categories)
 - Shows a provider availability table for your macOS version
 - Creates the `Exercise Coach/Plans`, `Exercise Coach/Workouts`, and `Exercise Coach/Assessments` folders in Apple Notes
 

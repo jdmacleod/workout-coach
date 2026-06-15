@@ -106,10 +106,13 @@ plan_note_links = true
 # All paths are relative to the project root.
 
 [data]
-training_info   = "data/training-info.md"
-workouts_dir    = "data/workouts/"
-plans_dir       = "data/plans/"
-assessments_dir = "data/assessments/"
+training_info    = "data/training-info.md"
+workouts_dir     = "data/workouts/"
+plans_dir        = "data/plans/"
+assessments_dir  = "data/assessments/"
+# Exercise library root. coach setup bootstraps this from data/examples/exercise-library/.
+# Add your own .md files in any category subdirectory to expand the sampler pool.
+exercise_library = "data/exercise-library/"
 
 # ── Calendar Integration ──────────────────────────────────────────────────────
 

@@ -29,8 +29,9 @@ coach setup [OPTIONS]
 1. Copies `config/config.example.toml` → `config/config.toml` (if not present)
 2. Creates `data/workouts/`, `data/plans/`, `data/assessments/`
 3. Runs an interactive questionnaire: name, training days, goal, injuries, available equipment, session duration
-4. Shows a provider availability table for your macOS version
-5. Creates `Exercise Coach/Plans`, `Exercise Coach/Workouts`, `Exercise Coach/Assessments` folders in Apple Notes
+4. Bootstraps `data/exercise-library/` from `data/examples/exercise-library/` (skipped if it already exists)
+5. Shows a provider availability table for your macOS version
+6. Creates `Exercise Coach/Plans`, `Exercise Coach/Workouts`, `Exercise Coach/Assessments` folders in Apple Notes
 
 **Requires:** Apple Notes running and configured.
 
@@ -64,7 +65,10 @@ coach plan [OPTIONS]
 
 - Reads `data/training-info.md` for your training profile (copies example if missing)
 - Loads the prior week's "Next Week Notes" from Apple Notes (carries coaching context forward)
-- Reads the last 4 weeks of local workout files to build a history summary
+- Reads the last 5 weeks of local workout files; builds history summary and computes three variation signals:
+  - **Exercise library sample** — one exercise per category from `data/exercise-library/`, filtered by your `available_equipment`, rotated by ISO week so each week sees different options. Add your own `.md` files to any category to expand the pool.
+  - **Periodization directive** — suggests progressive overload after 4+ consistent training weeks; suggests volume reduction after 3+ weeks averaging RPE ≥ 8.0. Suppressed if your prior week's assessment already addresses the topic.
+  - **Progressive overload hints** — scans completed workout sections for load data (`- Exercise: NxM @ Xkg`); any exercise at a new personal best gets a `+2.5 kg` nudge in the prompt.
 - Enforces `available_equipment` and `max_session_duration_minutes` from your profile as hard constraints; runs a self-correction pass if the LLM violates them
 - On the Swift provider with `available_equipment` set, runs a web search phase before generating the plan (searches for equipment-specific exercises)
 - Calls the LLM once; retries once on JSON parse failure

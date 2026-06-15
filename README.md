@@ -58,7 +58,8 @@ uv run coach setup
 ```
 
 Answers 6 questions (name, training days, goal, injuries, available equipment, session
-duration), creates `config/config.toml`, and sets up Apple Notes folders.
+duration), creates `config/config.toml`, sets up Apple Notes folders, and bootstraps
+the exercise library at `data/exercise-library/`.
 
 **2. Describe your training:**
 
@@ -132,6 +133,7 @@ config/
 
 data/
   training-info.md      — your training profile (edit freely)
+  exercise-library/     — exercise library (bootstrapped by setup, add your own)
   workouts/             — local copies of workout notes (gitignored)
   plans/                — local copies of weekly plans (gitignored)
   assessments/          — local copies of assessments (gitignored)

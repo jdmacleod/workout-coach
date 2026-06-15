@@ -54,3 +54,23 @@ uv add --dev <package>  # dev dependency → [dependency-groups] dev
 ```
 
 Commit `uv.lock` alongside any dependency changes.
+
+## Exercise library
+
+The exercise library lives in `data/examples/exercise-library/` (committed). Each file uses YAML-like front matter:
+
+```markdown
+---
+name: Floor Press
+equipment: [barbell, bumper_plates]
+type: strength-push
+difficulty: intermediate
+---
+## Sets / Reps
+- Strength: 4x4-6 @ 75-85% 1RM
+
+## Cues
+...
+```
+
+Equipment tags use ALL-semantics: every tag must be present in the user's `available_equipment` for the exercise to be eligible. An empty `equipment: []` means bodyweight — always eligible. See `data/examples/exercise-library/CONTRIBUTING.md` for the full format spec and category list.

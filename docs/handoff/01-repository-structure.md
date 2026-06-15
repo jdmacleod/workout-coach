@@ -81,6 +81,14 @@ exercise-coach/
 └── data/
     ├── examples/                     # Committed — never gitignored
     │   ├── training-info.md
+    │   ├── exercise-library/         # 34 exercises across 6 categories (bootstrapped by setup)
+    │   │   ├── CONTRIBUTING.md
+    │   │   ├── strength-push/
+    │   │   ├── strength-pull/
+    │   │   ├── strength-lower/
+    │   │   ├── cardio/
+    │   │   ├── hiit/
+    │   │   └── mobility/
     │   ├── workouts/
     │   │   ├── strength-upper.md
     │   │   ├── strength-lower.md
@@ -90,6 +98,7 @@ exercise-coach/
     │   └── plans/
     │       └── week-example.md
     # training-info.md               # Gitignored — user's real file
+    # exercise-library/              # Gitignored — bootstrapped from examples/ by setup
     # workouts/                      # Gitignored
     # plans/                         # Gitignored
     # assessments/                   # Gitignored
@@ -109,6 +118,7 @@ config/*.ics
 
 # === User data ===
 data/training-info.md
+data/exercise-library/
 data/workouts/
 data/plans/
 data/assessments/
