@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import random
 from pathlib import Path
 from typing import Annotated, Any, cast
 
@@ -35,6 +36,7 @@ from coach.models.workout import Workout
 from coach.notes.client import NotesClient
 from coach.notes.exceptions import NotesClientError
 from coach.notes.parser import (
+    parse_exercise_sets,
     parse_front_matter,
     parse_sections,
     render_plan_note,
@@ -213,16 +215,11 @@ def _load_next_week_notes(cfg: Config, week: str, notes_client: NotesClient) -> 
     return "(none yet — first week)"
 
 
-def _load_history_summary(cfg: Config, weeks: int = 4) -> str:
-    """Glob last N weeks of workout files and produce a weekly rollup summary."""
-    from collections import defaultdict
-
-    from coach.notes.parser import workout_from_note
-
+def _load_recent_workouts(cfg: Config, weeks: int = 5) -> list[Workout]:
+    """Glob last N weeks of workout files, returning Workout objects sorted by date."""
     workouts_dir = resolve_data_path(cfg, "workouts_dir")
     if not workouts_dir.exists():
-        return "(no history yet)"
-
+        return []
     cutoff = datetime.date.today() - datetime.timedelta(weeks=weeks)
     workouts: list[Workout] = []
     for path in sorted(workouts_dir.glob("*.md")):
@@ -233,11 +230,17 @@ def _load_history_summary(cfg: Config, weeks: int = 4) -> str:
                 workouts.append(w)
         except Exception:
             continue
+    return workouts
 
+
+def _load_history_summary(cfg: Config, weeks: int = 4) -> str:
+    """Produce a weekly rollup summary of recent workouts."""
+    from collections import defaultdict
+
+    workouts = _load_recent_workouts(cfg, weeks=weeks)
     if not workouts:
         return "(no history yet)"
 
-    # Group by ISO week and produce one summary line per week
     weekly: dict[tuple[int, int], list[Workout]] = defaultdict(list)
     for w in workouts:
         iso = w.date.isocalendar()
@@ -256,6 +259,181 @@ def _load_history_summary(cfg: Config, weeks: int = 4) -> str:
         )
 
     return "\n".join(lines)
+
+
+def _notes_already_mention(notes: str, *keywords: str) -> bool:
+    """Return True if any keyword appears in notes (case-insensitive)."""
+    lower = notes.lower()
+    return any(kw.lower() in lower for kw in keywords)
+
+
+def _build_periodization_directive(history: list[Workout]) -> str:
+    """Return a periodization note based on training history length and recent RPE."""
+    from collections import defaultdict
+
+    if len(history) < 3:
+        return ""
+    weekly: dict[tuple[int, int], list[Workout]] = defaultdict(list)
+    for w in history:
+        iso = w.date.isocalendar()
+        weekly[(iso.year, iso.week)].append(w)
+    weeks_sorted = sorted(weekly.keys())
+    if len(weeks_sorted) < 2:
+        return ""
+    last_3 = weeks_sorted[-3:] if len(weeks_sorted) >= 3 else weeks_sorted
+    rpes = [w.rpe for wk in last_3 for w in weekly[wk] if w.rpe is not None]
+    avg_rpe = sum(rpes) / len(rpes) if rpes else None
+    if avg_rpe is not None and avg_rpe >= 8.0 and len(weeks_sorted) >= 3:
+        return (
+            f"Periodization: athlete is approaching peak fatigue (recent avg RPE {avg_rpe:.1f}). "
+            "Consider a moderate volume reduction (10–15% fewer sets) to allow recovery."
+        )
+    if len(weeks_sorted) >= 4:
+        return (
+            "Periodization: 4+ consistent training weeks. "
+            "Maintain progressive overload — add 2.5–5 kg to main lifts or add one rep per set."
+        )
+    return ""
+
+
+def _check_deload_signal(history: list[Workout]) -> str:
+    """Return a deload recommendation if fatigue signals are present in last 2 weeks."""
+    if not history:
+        return ""
+    cutoff = datetime.date.today() - datetime.timedelta(weeks=2)
+    recent = [w for w in history if w.date >= cutoff and w.rpe is not None]
+    if len(recent) < 3:
+        return ""
+    avg_rpe = sum(w.rpe for w in recent if w.rpe is not None) / len(recent)
+    if avg_rpe >= 8.5:
+        return (
+            f"Deload signal: recent avg RPE {avg_rpe:.1f} over {len(recent)} sessions. "
+            "Recommend deload week — reduce loads 20%, volume 30–40%, keep movement patterns."
+        )
+    return ""
+
+
+def _build_overload_hints(history: list[Workout]) -> str:
+    """Scan completed sections for exercise loads and emit progressive overload hints."""
+    from collections import defaultdict
+
+    exercise_loads: dict[str, list[float]] = defaultdict(list)
+    for w in history:
+        if not w.completed_content:
+            continue
+        for s in parse_exercise_sets(w.completed_content):
+            if s.load_kg is not None:
+                exercise_loads[s.name.lower()].append(s.load_kg)
+
+    if not exercise_loads:
+        return ""
+
+    hints: list[str] = []
+    for name, loads in exercise_loads.items():
+        if len(loads) < 2:
+            continue
+        if loads[-1] >= max(loads[:-1]):
+            hints.append(
+                f"  - {name.title()}: last recorded {loads[-1]:.1f} kg"
+                " — consider adding 2.5 kg this week"
+            )
+
+    if not hints:
+        return ""
+    return "Progressive Overload Hints (from completed workouts):\n" + "\n".join(hints)
+
+
+def _parse_exercise_front_matter(content: str) -> dict[str, Any]:
+    """Parse YAML-like front matter from exercise library files."""
+    lines = content.split("\n")
+    if not lines or lines[0].strip() != "---":
+        return {}
+    end = -1
+    for i, line in enumerate(lines[1:], 1):
+        if line.strip() == "---":
+            end = i
+            break
+    if end == -1:
+        return {}
+    result: dict[str, Any] = {}
+    for line in lines[1:end]:
+        if ":" not in line:
+            continue
+        key, _, val = line.partition(":")
+        key = key.strip()
+        val = val.strip()
+        if val.startswith("[") and val.endswith("]"):
+            inner = val[1:-1]
+            result[key] = [item.strip() for item in inner.split(",") if item.strip()]
+        else:
+            result[key] = val
+    return result
+
+
+def _extract_exercise_sets_reps(content: str) -> str:
+    """Get the first bullet from the Sets/Reps or Duration section of an exercise file."""
+    in_section = False
+    for line in content.split("\n"):
+        stripped = line.strip()
+        if stripped.startswith("## Sets") or stripped.startswith("## Duration"):
+            in_section = True
+            continue
+        if in_section:
+            if stripped.startswith("-"):
+                return stripped.lstrip("-").strip()
+            if stripped.startswith("##"):
+                break
+    return ""
+
+
+def _sample_exercise_library(equipment: list[str], cfg: Config) -> str:
+    """Sample one exercise per category from the library, filtered by available equipment.
+
+    Uses ISO week number as seed so the same week always produces the same selection.
+    Returns an empty string if the library directory doesn't exist.
+    """
+    lib_path = resolve_data_path(cfg, "exercise_library")
+    if not lib_path.exists():
+        console.print("[dim]Exercise library not found — skipping exercise rotation.[/dim]")
+        return ""
+
+    normalized_equip = {e.lower().replace(" ", "_").replace("-", "_") for e in equipment}
+    week_num = datetime.date.today().isocalendar().week
+    rng = random.Random(week_num)
+
+    categories = [
+        "strength-push",
+        "strength-pull",
+        "strength-lower",
+        "cardio",
+        "hiit",
+        "mobility",
+    ]
+    samples: list[str] = []
+    for category in categories:
+        cat_dir = lib_path / category
+        if not cat_dir.exists():
+            continue
+        eligible: list[Path] = []
+        for ex_path in sorted(cat_dir.glob("*.md")):
+            fm = _parse_exercise_front_matter(ex_path.read_text())
+            required: list[str] = fm.get("equipment", [])
+            if isinstance(required, list) and all(tag in normalized_equip for tag in required):
+                eligible.append(ex_path)
+        if not eligible:
+            continue
+        chosen = rng.choice(eligible)
+        fm = _parse_exercise_front_matter(chosen.read_text())
+        name = fm.get("name", chosen.stem)
+        sets_reps = _extract_exercise_sets_reps(chosen.read_text())
+        entry = f"- **{name}** ({category})"
+        if sets_reps:
+            entry += f": {sets_reps}"
+        samples.append(entry)
+
+    if not samples:
+        return ""
+    return "## Exercise Rotation Options\n" + "\n".join(samples)
 
 
 def _run_plan(
@@ -312,14 +490,41 @@ def _run_plan(
 
     # Load history
     history_summary = _load_history_summary(cfg)
+    recent_workouts = _load_recent_workouts(cfg)
+
+    # Equipment and duration constraints (needed for variation signals and prompt)
+    equipment = cfg.profile.available_equipment
+    max_duration = cfg.profile.max_session_duration_minutes
+
+    # Build variation signals
+    signals: list[str] = []
+    deload_signal = _check_deload_signal(recent_workouts)
+    if deload_signal and not _notes_already_mention(
+        next_week_notes, "deload", "recovery week", "lighter"
+    ):
+        signals.append(deload_signal)
+    periodization_dir = _build_periodization_directive(recent_workouts)
+    if periodization_dir and not _notes_already_mention(
+        next_week_notes, "overload", "progressive", "increase", "deload"
+    ):
+        signals.append(periodization_dir)
+    overload_hints = _build_overload_hints(recent_workouts)
+    if overload_hints:
+        signals.append(overload_hints)
+
+    # Build exercise options block
+    exercise_lib = _sample_exercise_library(equipment, cfg)
+    exercise_options_parts: list[str] = []
+    if exercise_lib:
+        exercise_options_parts.append(exercise_lib)
+    if signals:
+        exercise_options_parts.append("## Training Signals\n" + "\n".join(signals))
+    exercise_options = "\n\n".join(exercise_options_parts)
 
     # Build prompt
     monday = _week_to_monday(target_week)
     days_of_week = [(monday + datetime.timedelta(days=i)).strftime("%a") for i in range(7)]
     available_days = ", ".join(days_of_week)
-
-    equipment = cfg.profile.available_equipment
-    max_duration = cfg.profile.max_session_duration_minutes
 
     equipment_constraint = (
         f"- Equipment available: {', '.join(equipment)}. "
@@ -341,6 +546,7 @@ def _run_plan(
         profile_injury_notes=cfg.profile.injury_notes or "None",
         next_week_notes=next_week_notes,
         training_info=training_info,
+        exercise_options=exercise_options,
         history_summary=history_summary,
         external_sessions="(none — calendar integration disabled)"
         if no_calendar or not cfg.calendar.enabled

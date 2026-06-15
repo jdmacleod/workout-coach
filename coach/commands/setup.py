@@ -50,6 +50,22 @@ def run(
         raise typer.Exit(code=1)
 
 
+def _bootstrap_exercise_library() -> None:
+    """Copy the example exercise library into data/ if it doesn't already exist."""
+    src = EXAMPLES_DIR / "exercise-library"
+    dst = DATA_DIR / "exercise-library"
+    if dst.exists():
+        return
+    if not src.exists():
+        return
+    shutil.copytree(src, dst)
+    console.print(f"Copied example exercise library to [bold]{dst}[/bold]")
+    console.print(
+        "Add your own exercises under [bold]data/exercise-library/[/bold] — "
+        "see CONTRIBUTING.md inside for the format."
+    )
+
+
 def _run_setup(*, non_interactive: bool, reset: bool) -> None:
     if CONFIG_FILE.exists() and not reset:
         console.print(f"[green]Config already exists at {CONFIG_FILE}[/green]")
@@ -76,6 +92,9 @@ def _run_setup(*, non_interactive: bool, reset: bool) -> None:
         shutil.copy(EXAMPLES_DIR / "training-info.md", training_info)
         console.print(f"Copied example training info to [bold]{training_info}[/bold]")
         console.print("Edit [bold]data/training-info.md[/bold] to describe your training.")
+
+    # Step 3b: Bootstrap exercise library if missing
+    _bootstrap_exercise_library()
 
     # Step 4: Detect macOS version and show provider table
     _show_provider_table()
