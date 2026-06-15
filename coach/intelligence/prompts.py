@@ -39,6 +39,7 @@ Injury notes: {profile_injury_notes}
 ## Training Philosophy and Example Workouts
 {training_info}
 
+{exercise_options}
 ## Recent History (last 4 weeks)
 {history_summary}
 

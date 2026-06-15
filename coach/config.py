@@ -96,6 +96,7 @@ class DataConfig:
     workouts_dir: str = "data/workouts/"
     plans_dir: str = "data/plans/"
     assessments_dir: str = "data/assessments/"
+    exercise_library: str = "data/exercise-library/"
 
 
 @dataclass
