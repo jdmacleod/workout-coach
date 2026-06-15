@@ -18,8 +18,8 @@ uv run coach --help
 ## Running tests
 
 ```bash
-# Unit tests — no Apple Notes required, fast
-uv run pytest tests/ -m "not integration"
+# Unit tests — fast, no Apple Notes, no LLM required
+uv run pytest tests/ -m "not integration and not usability and not usability_live"
 
 # Integration tests — requires Notes.app running and configured
 uv run pytest tests/ -m integration
@@ -27,8 +27,21 @@ uv run pytest tests/ -m integration
 # Search smoke tests — hit live APIs; keyed providers skip when no key is configured
 uv run pytest tests/ -m search -v
 
-# All tests
-uv run pytest tests/
+# Synthetic usability simulation — 13-week plan→assess loop, MockInferenceProvider (no LLM)
+# Slow (~30 s). Output written to usability-output/.
+uv run pytest tests/ -m usability -v -s
+
+# Live usability simulation (short) — 6-week simulation with real LLM provider
+# Requires a configured inference provider. ~half the cost of the full run.
+# Output written to usability-output/live/.
+uv run pytest tests/usability/test_simulation_live_short.py -m usability_live -v -s
+
+# Live usability simulation (full) — 13-week simulation with real LLM provider
+# Slow — each week makes ~8 LLM calls. Output written to usability-output/live/.
+uv run pytest tests/usability/test_simulation_live.py -m usability_live -v -s
+
+# Everything except live LLM tests (matches CI)
+uv run pytest tests/ -m "not integration and not usability_live"
 ```
 
 ## Lint, format, type check

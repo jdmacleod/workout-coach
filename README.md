@@ -175,7 +175,7 @@ Monday   →  coach plan        (picks up last week's coaching notes automatical
 
 ```bash
 uv sync                                             # install all deps
-uv run pytest tests/ -m "not integration"          # unit tests
+uv run pytest tests/ -m "not integration and not usability and not usability_live"  # unit tests
 uv run ruff check coach/ tests/ && uv run ruff format coach/ tests/ && uv run mypy coach/
 ```
 

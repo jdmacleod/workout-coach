@@ -37,9 +37,12 @@ uv run ruff check coach/ tests/ && uv run ruff format coach/ tests/ && uv run my
 ### Testing
 
 ```bash
-uv run pytest tests/ -m "not integration"  # unit tests (fast, no Apple Notes)
+uv run pytest tests/ -m "not integration and not usability and not usability_live"  # unit tests (fast, no Apple Notes, no LLM)
 uv run pytest tests/ -m integration        # integration tests (requires Notes.app)
-uv run pytest tests/                       # all tests
+uv run pytest tests/ -m "not integration and not usability_live"                    # matches CI
+uv run pytest tests/ -m usability -v -s    # synthetic 13-week simulation (no LLM)
+uv run pytest tests/usability/test_simulation_live_short.py -m usability_live -v -s  # 6-week live LLM
+uv run pytest tests/usability/test_simulation_live.py -m usability_live -v -s        # 13-week live LLM
 ```
 
 ## Skill routing
