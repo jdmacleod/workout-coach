@@ -34,36 +34,6 @@ Items deferred from v0.1. Each item includes context, motivation, and a starting
 
 ---
 
-## T1 — Catch Anthropic SDK exceptions in AnthropicProvider.infer()
-**Priority:** P2 | **Effort:** S (human: ~30min / CC: ~5min)
-
-**What:** Add `try/except anthropic.APIError` (and subclasses `AuthenticationError`, `RateLimitError`) to `AnthropicProvider.infer()`. Re-raise as `InferenceError` with a user-readable message.
-
-**Why:** Currently a bad API key or rate limit hit surfaces as an unhandled exception. User sees a Python traceback instead of "Inference error: invalid API key."
-
-**Context:** `AnthropicProvider` is a fallback provider (user must have `ANTHROPIC_API_KEY` set). Error paths are less common than Swift provider failures, but the user experience is worse when they hit.
-
-**Start:** `coach/intelligence/providers/anthropic.py` — wrap the `client.messages.create()` call.
-
-**Depends on:** Nothing — isolated to one method.
-
----
-
-## T2 — Handle malformed workout front matter gracefully
-**Priority:** P2 | **Effort:** S (human: ~30min / CC: ~5min)
-
-**What:** In `load_workouts()`, wrap YAML front matter parsing in try/except. Skip malformed files with a warning: `"Warning: skipping {filename} — invalid front matter"`.
-
-**Why:** A single corrupted `.md` file currently crashes `coach report`, `coach plan`, and `coach status`. Since files are system-generated this is rare, but manual edits or disk corruption can produce invalid YAML.
-
-**Context:** All file-based commands glob `data/workouts/*.md` and parse front matter. The shared `load_workouts()` helper is the right fix point.
-
-**Start:** `coach/intelligence/load_workouts.py` (or wherever the helper lives).
-
-**Depends on:** Nothing.
-
----
-
 ## T3 — iOS Quick Log Shortcut (EC-QuickLog)
 **Priority:** P3 | **Effort:** M (human: ~2 days / CC: ~30min)
 
@@ -121,23 +91,6 @@ Items deferred from v0.1. Each item includes context, motivation, and a starting
 **Start:** `coach/commands/plan.py` (or wherever `load_workouts()` lives).
 
 **Depends on:** Nothing — isolated to the glob + filter pattern.
-
----
-
-## T7 — Specify coach assess --week behavior when Notes/local files disagree
-**Priority:** P2 | **Effort:** S (human: ~1h / CC: ~10min)
-
-**What:** Define and implement the authoritative source for `coach assess --week` when Notes and local files are out of sync. For example: Notes has a workout that local files don't (user edited Notes directly), or local has a file that Notes doesn't (the Notes write failed after `coach log`).
-
-**Why:** Silent inconsistency during `assess --week` could produce incorrect completion rates and a misleading `## Next Week Notes` paragraph (the core feedback signal). The error is downstream and hard to trace.
-
-**Proposed rule:** Local files are the source of truth for `coach assess --week`. If Notes has edits not reflected locally (user added content in Notes), the user should run `coach sync` (or manually export the Notes content) before assessing. Document this contract in `03-cli-commands.md`.
-
-**Context:** `coach plan` writes local files first, then pushes to Notes (write ordering added in this eng review). Assessments should follow the same convention: read from local, write back to local first, then push to Notes.
-
-**Start:** `03-cli-commands.md` assess section edge cases; then `coach/commands/assess.py`.
-
-**Depends on:** Nothing.
 
 ---
 

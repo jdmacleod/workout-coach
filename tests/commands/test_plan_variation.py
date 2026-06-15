@@ -375,3 +375,22 @@ def test_load_recent_workouts_returns_within_cutoff(tmp_path):
     result = _load_recent_workouts(cfg, weeks=5)
     assert len(result) == 1
     assert result[0].date == recent_w.date
+
+
+def test_load_recent_workouts_logs_bad_file(tmp_path):
+    """Malformed workout file in plan's loader emits a warning instead of silently skipping."""
+    from unittest.mock import patch
+
+    cfg = _make_config(tmp_path)
+    workouts_dir = tmp_path / "workouts"
+    workouts_dir.mkdir()
+    (workouts_dir / "2026-06-01-bad.md").write_bytes(b"\xff\xfd binary garbage")
+
+    with patch("coach.commands.plan.console") as mock_console:
+        result = _load_recent_workouts(cfg, weeks=52)
+
+    assert result == []
+    mock_console.print.assert_called_once()
+    warning_text = mock_console.print.call_args[0][0]
+    assert "2026-06-01-bad.md" in warning_text
+    assert "Warning" in warning_text

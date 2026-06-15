@@ -23,3 +23,29 @@ def test_load_week_workouts_logs_bad_file(tmp_path: Path) -> None:
     warning_text = mock_console.print.call_args[0][0]
     assert "2026-06-08-bad.md" in warning_text
     assert "Warning" in warning_text
+
+
+def test_assess_week_no_local_files_message(tmp_path: Path) -> None:
+    """When no local workout files exist, the user sees the source-of-truth hint."""
+    from unittest.mock import MagicMock
+
+    from coach.commands.assess import _assess_week
+    from coach.config import Config, DataConfig, NotesConfig
+
+    cfg = Config()
+    cfg.data = DataConfig(
+        workouts_dir=str(tmp_path / "workouts") + "/",
+        plans_dir=str(tmp_path / "plans") + "/",
+        assessments_dir=str(tmp_path / "assessments") + "/",
+    )
+    cfg.notes = NotesConfig()
+
+    client = MagicMock()
+    provider = MagicMock()
+
+    with patch("coach.commands.assess.console") as mock_console:
+        _assess_week(cfg, client, provider, "2026-W24", dry_run=True)
+
+    all_calls = " ".join(str(c) for c in mock_console.print.call_args_list)
+    assert "local" in all_calls.lower()
+    assert "data/workouts" in all_calls or "source of truth" in all_calls.lower()

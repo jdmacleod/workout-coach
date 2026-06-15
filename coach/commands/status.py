@@ -69,7 +69,8 @@ def _run_status(*, week: str | None = None) -> None:
                 w = workout_from_note(content, path.stem)
                 if current_monday <= w.date <= current_sunday:
                     week_workouts.append(w)
-            except Exception:
+            except Exception as exc:
+                console.print(f"[dim]Warning: skipping {path.name} — {exc}[/dim]")
                 continue
 
     total = len(week_workouts)

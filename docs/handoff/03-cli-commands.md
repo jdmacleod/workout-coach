@@ -176,13 +176,15 @@ configured LLM, write extracted data back to notes, and generate a weekly assess
 ### Behavior (in order)
 
 1. Determine target scope: single workout, or full week.
-2. Load workout notes from Apple Notes (or local files).
+2. **Source-of-truth contract:**
+   - `--week` (full-week mode): reads workout files from `data/workouts/`. Local files are authoritative. Workout notes added or edited only in Apple Notes will not be included; the user must run `coach log` to create a local file first.
+   - `--workout` (single-note mode): reads section content (`## Completed`, `## How It Went`) from Apple Notes so that in-app edits are captured; reads structured metadata (date, type, status) from the corresponding local file.
 3. For each note where `status != planned`:
    a. Extract `## Completed` and `## How It Went` sections.
    b. If either section has content, run assessment prompt against configured provider.
    c. Parse JSON response: `{rpe, mood, soreness, duration_actual, prs, deviations, summary}`.
    d. Update front matter fields in the note (`status: completed`, `rpe`, `mood`, etc.).
-   e. Write updated note back to Apple Notes via AppleScript.
+   e. Write ordering: local file updated first, then Apple Notes.
 4. If assessing a full week:
    a. Aggregate metrics from all sessions.
    b. Generate weekly narrative via LLM.

@@ -228,7 +228,8 @@ def _load_recent_workouts(cfg: Config, weeks: int = 5) -> list[Workout]:
             w = workout_from_note(content, path.stem)
             if w.date >= cutoff and w.type != "rest":
                 workouts.append(w)
-        except Exception:
+        except Exception as exc:
+            console.print(f"[dim]Warning: skipping {path.name} — {exc}[/dim]")
             continue
     return workouts
 

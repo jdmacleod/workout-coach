@@ -193,7 +193,12 @@ def _assess_week(
     weekly_workouts = _load_week_workouts(workouts_dir, week)
 
     if not weekly_workouts:
-        console.print(f"[yellow]No workouts found for {week}.[/yellow]")
+        console.print(f"[yellow]No local workout files found for {week}.[/yellow]")
+        console.print(
+            "  [dim]coach assess --week reads from data/workouts/. "
+            "Workout notes edited only in Apple Notes won't appear here — "
+            "local files are the source of truth. Run 'coach log' to add missing sessions.[/dim]"
+        )
         return
 
     # Assess each completed workout
