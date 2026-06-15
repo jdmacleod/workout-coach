@@ -4,6 +4,7 @@ from datetime import date
 
 from coach.models.workout import Workout
 from coach.notes.parser import (
+    parse_exercise_sets,
     parse_front_matter,
     parse_sections,
     render_assessment_note_html,
@@ -430,3 +431,60 @@ def test_render_and_reparse_round_trip():
     assert reparsed.duration_planned == workout.duration_planned
     assert reparsed.tags == workout.tags
     assert reparsed.planned_content == workout.planned_content
+
+
+# ── parse_exercise_sets ───────────────────────────────────────────────────────
+
+
+def test_parse_exercise_sets_basic():
+    text = "- Floor Press: 4x5 @ 62.5kg"
+    sets = parse_exercise_sets(text)
+    assert len(sets) == 1
+    s = sets[0]
+    assert s.name == "Floor Press"
+    assert s.sets == 4
+    assert s.reps == 5
+    assert s.load_kg == 62.5
+    assert s.load_str == "62.5kg"
+
+
+def test_parse_exercise_sets_amrap_reps():
+    text = "- Pull-ups: 3xAMRAP"
+    sets = parse_exercise_sets(text)
+    assert len(sets) == 1
+    assert sets[0].reps is None
+    assert sets[0].load_kg is None
+
+
+def test_parse_exercise_sets_no_load():
+    text = "- Goblet Squat: 3x12"
+    sets = parse_exercise_sets(text)
+    assert len(sets) == 1
+    assert sets[0].load_kg is None
+    assert sets[0].load_str == ""
+
+
+def test_parse_exercise_sets_multiple():
+    text = """\
+- Deadlift: 4x3 @ 140kg
+- Romanian Deadlift: 3x10 @ 80kg
+- Nordic Curl: 3x5
+"""
+    sets = parse_exercise_sets(text)
+    assert len(sets) == 3
+    assert sets[0].name == "Deadlift"
+    assert sets[0].load_kg == 140.0
+    assert sets[1].name == "Romanian Deadlift"
+    assert sets[2].load_kg is None
+
+
+def test_parse_exercise_sets_ignores_non_matching_lines():
+    text = """\
+Main Lifts:
+Some warm-up notes here.
+- Floor Press: 4x5 @ 60kg
+Cool down: stretch.
+"""
+    sets = parse_exercise_sets(text)
+    assert len(sets) == 1
+    assert sets[0].name == "Floor Press"

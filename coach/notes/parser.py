@@ -14,7 +14,10 @@ All values are strings in front matter; callers coerce to the right types.
 
 from __future__ import annotations
 
+import contextlib
 import html as _html
+import re
+from dataclasses import dataclass
 from datetime import date
 from typing import TYPE_CHECKING, Any
 
@@ -22,6 +25,60 @@ from coach.models.workout import Workout, WorkoutSource, WorkoutStatus, WorkoutT
 
 if TYPE_CHECKING:
     from coach.models.plan import WeeklyPlan
+
+# ── Exercise set parsing ──────────────────────────────────────────────────────
+
+_SET_RE = re.compile(
+    r"^[-•]\s*(.+?):\s*(\d+)x(\d+|\w+)(?:\s*@\s*(.+))?$",
+    re.MULTILINE,
+)
+
+
+@dataclass
+class ExerciseSet:
+    name: str
+    sets: int
+    reps: int | None  # None for AMRAP / Max / Failure
+    load_kg: float | None  # None if bodyweight
+    load_str: str  # raw string as written, "" if absent
+
+
+def parse_exercise_sets(completed_text: str) -> list[ExerciseSet]:
+    """Extract structured set data from a free-form completed-workout section.
+
+    Matches lines like:
+      - Floor Press: 4x5 @ 62.5kg
+      - Pull-ups: 3xMax
+      - Deadlift: 1xAMRAP @ 140kg
+
+    Non-matching lines are silently skipped. Load values are extracted via
+    the first numeric substring in the raw load string (e.g. "62.5kg (felt heavy)" → 62.5).
+    Reps are None when the capture group is non-numeric (AMRAP, Max, Failure, etc.).
+    """
+    results: list[ExerciseSet] = []
+    for m in _SET_RE.finditer(completed_text):
+        name = m.group(1).strip()
+        try:
+            sets = int(m.group(2))
+        except ValueError:
+            continue
+        reps_raw = m.group(3)
+        try:
+            reps: int | None = int(reps_raw)
+        except ValueError:
+            reps = None  # AMRAP / Max / Failure / etc.
+        load_str = (m.group(4) or "").strip()
+        load_kg: float | None = None
+        if load_str:
+            num = re.search(r"[\d.]+", load_str)
+            if num:
+                with contextlib.suppress(ValueError):
+                    load_kg = float(num.group())
+        results.append(
+            ExerciseSet(name=name, sets=sets, reps=reps, load_kg=load_kg, load_str=load_str)
+        )
+    return results
+
 
 # ── Parsing ───────────────────────────────────────────────────────────────────
 
