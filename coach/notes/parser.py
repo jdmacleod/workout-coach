@@ -26,6 +26,16 @@ from coach.models.workout import Workout, WorkoutSource, WorkoutStatus, WorkoutT
 if TYPE_CHECKING:
     from coach.models.plan import WeeklyPlan
 
+# ── Workout section placeholder strings ──────────────────────────────────────
+# These are exported so local.py can detect placeholder content without
+# duplicating the strings that render_workout_note / render_workout_note_html write.
+_COMPLETED_PLACEHOLDER_MD = (
+    "<!-- Fill in after the workout. Free text or match the planned format. -->"
+)
+_HOW_WENT_PLACEHOLDER_MD = "<!-- Free text. The assessor will parse this for RPE, PRs, notes. -->"
+_COMPLETED_PLACEHOLDER_NOTES = "Fill in after the workout. Free text or match the planned format."
+_HOW_WENT_PLACEHOLDER_NOTES = "Free text - RPE, PRs, how you felt."
+
 # ── Exercise set parsing ──────────────────────────────────────────────────────
 
 _SET_RE = re.compile(
@@ -178,14 +188,8 @@ def render_workout_note(workout: Workout) -> str:
         "---",
     ]
     planned = _md_subheadings(workout.planned_content or "<!-- Fill in after the workout. -->")
-    completed = (
-        workout.completed_content
-        or "<!-- Fill in after the workout. Free text or match the planned format. -->"
-    )
-    how_it_went = (
-        workout.how_it_went
-        or "<!-- Free text. The assessor will parse this for RPE, PRs, notes. -->"
-    )
+    completed = workout.completed_content or _COMPLETED_PLACEHOLDER_MD
+    how_it_went = workout.how_it_went or _HOW_WENT_PLACEHOLDER_MD
 
     return (
         "\n".join(fm_lines)
@@ -453,11 +457,8 @@ def render_workout_note_html(workout: Workout) -> str:
     meta = " &nbsp; ".join(meta_parts)
 
     planned_html = _content_to_html(workout.planned_content, "Fill in after the workout.")
-    completed_html = _content_to_html(
-        workout.completed_content,
-        "Fill in after the workout. Free text or match the planned format.",
-    )
-    how_html = _para_html(workout.how_it_went, "Free text - RPE, PRs, how you felt.")
+    completed_html = _content_to_html(workout.completed_content, _COMPLETED_PLACEHOLDER_NOTES)
+    how_html = _para_html(workout.how_it_went, _HOW_WENT_PLACEHOLDER_NOTES)
 
     parts = []
     if title_html:
