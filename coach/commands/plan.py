@@ -157,13 +157,16 @@ def _normalize_planned_content(content: str, wtype: str) -> str:
 
 
 def _resolve_target_week(week_str: str | None) -> str:
-    """Return YYYY-Www for next Monday's ISO week (or the provided string)."""
+    """Return YYYY-Www for the current or upcoming week (or the provided string).
+
+    If today is Monday, returns this week. Otherwise returns the next Monday's week.
+    """
     if week_str:
         return week_str
     today = datetime.date.today()
-    days_until_monday = (7 - today.weekday()) % 7 or 7
-    next_monday = today + datetime.timedelta(days=days_until_monday)
-    iso = next_monday.isocalendar()
+    days_until_monday = (7 - today.weekday()) % 7
+    target_monday = today + datetime.timedelta(days=days_until_monday)
+    iso = target_monday.isocalendar()
     return f"{iso.year}-W{iso.week:02d}"
 
 
