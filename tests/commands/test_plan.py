@@ -525,8 +525,9 @@ def test_plan_live_writes_file_for_slash_in_title(tmp_path):
     assert "/" not in written[0].name, f"Filename contains '/': {written[0].name}"
 
 
-def test_plan_deduplicates_same_day_sessions(tmp_path):
-    """When the LLM returns two sessions on the same day, only the first is kept."""
+def test_plan_reassigns_same_day_sessions_to_open_day(tmp_path):
+    """When the LLM returns two sessions on the same day, the extra is moved to an
+    open day in the week rather than dropped, so fitness_days_per_week is honored."""
     from coach.commands.plan import _run_plan
     from coach.notes.schema import FOLDER_WORKOUTS
 
@@ -586,11 +587,22 @@ def test_plan_deduplicates_same_day_sessions(tmp_path):
     workout_files = list((tmp_path / "workouts").glob("*.md"))
     workout_notes = mock_client.list_notes(FOLDER_WORKOUTS)
 
-    # Only 2 workouts should exist (Mon + Wed), not 3
-    assert len(workout_files) == 2, f"Expected 2 workout files, got: {workout_files}"
-    assert len(workout_notes) == 2, f"Expected 2 workout notes, got: {workout_notes}"
+    # All 3 sessions should be kept, just spread across distinct days.
+    assert len(workout_files) == 3, f"Expected 3 workout files, got: {workout_files}"
+    assert len(workout_notes) == 3, f"Expected 3 workout notes, got: {workout_notes}"
 
-    # The Mon files should be for Upper Body Push (first), not Lower Body (duplicate)
+    # Mon still has Upper Body Push (first claim on that date).
     mon_files = [f for f in workout_files if "2026-06-15" in f.name]
     assert len(mon_files) == 1
     assert "upper-body-push" in mon_files[0].name
+
+    # Lower Body was moved off Monday to the next open day (Tuesday), not dropped.
+    lower_body_files = [f for f in workout_files if "lower-body" in f.name]
+    assert len(lower_body_files) == 1
+    assert "2026-06-15" not in lower_body_files[0].name
+    assert "2026-06-16" in lower_body_files[0].name
+
+    # Wed keeps its original session, untouched by the collision.
+    wed_files = [f for f in workout_files if "2026-06-17" in f.name]
+    assert len(wed_files) == 1
+    assert "zone-2-run" in wed_files[0].name

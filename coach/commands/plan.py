@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import json
 import random
@@ -440,6 +441,15 @@ def _sample_exercise_library(equipment: list[str], cfg: Config) -> str:
     return "## Exercise Rotation Options\n" + "\n".join(samples)
 
 
+def _reassign_workout_date(w: Workout, new_date: datetime.date) -> Workout:
+    """Return a copy of w moved to new_date, recomputing its date-derived id and note_title."""
+    title_suffix = (w.note_title or "Session").removeprefix(w.date.isoformat() + " ")
+    new_note_title = workout_note_title(new_date.isoformat(), title_suffix)
+    slug = title_suffix.lower().replace(" ", "-")
+    new_id = f"wrk-{new_date.isoformat().replace('-', '')}-{slug[:8]}"
+    return dataclasses.replace(w, date=new_date, note_title=new_note_title, id=new_id)
+
+
 def _run_plan(
     *,
     week: str | None,
@@ -643,18 +653,34 @@ def _run_plan(
         )
         workouts.append(w)
 
-    # Deduplicate by date: keep the first session per date, warn on extras.
+    # Resolve same-day collisions: when the LLM assigns two sessions to the same
+    # date, reassign the extra to the next open day in the week instead of
+    # dropping it, so the session count keeps matching fitness_days_per_week.
+    week_dates = [monday_date + datetime.timedelta(days=i) for i in range(7)]
     seen_dates: set[datetime.date] = set()
     deduped: list[Workout] = []
     for w in workouts:
-        if w.type == "rest" or w.date not in seen_dates:
+        if w.type == "rest":
+            deduped.append(w)
+            continue
+        if w.date not in seen_dates:
             deduped.append(w)
             seen_dates.add(w.date)
-        else:
+            continue
+        open_day = next((d for d in week_dates if d not in seen_dates), None)
+        if open_day is None:
             console.print(
                 f"[yellow]Warning: duplicate session on {w.date.isoformat()} "
-                f"('{w.note_title}') dropped — LLM assigned two sessions to the same day.[/yellow]"
+                f"('{w.note_title}') dropped — no open day left this week.[/yellow]"
             )
+            continue
+        console.print(
+            f"[dim]Moved '{w.note_title}' from {w.date.isoformat()} to {open_day.isoformat()} "
+            "— LLM assigned two sessions to the same day.[/dim]"
+        )
+        moved = _reassign_workout_date(w, open_day)
+        deduped.append(moved)
+        seen_dates.add(open_day)
     workouts = deduped
 
     # Python duration clamp (deterministic, runs after correction pass)
