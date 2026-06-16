@@ -1,6 +1,25 @@
 # Exercise Coach — TODOS
 
-Items deferred from v0.1. Each item includes context, motivation, and a starting point.
+Items deferred from current scope. Each item includes context, motivation, and a starting point.
+
+---
+
+## ~~T11~~ — Smart sync gate: honor iPhone edits to existing workout notes ✓ COMPLETED in v0.8.0
+
+---
+
+## T12 — Harmonize "How It Went" placeholder text across MD and HTML renders
+**Priority:** P3 | **Effort:** XS (human: ~5min / CC: ~2min)
+
+**What:** `parser.py:187` writes `<!-- Free text. The assessor will parse this for RPE, PRs, notes. -->` to local `.md` files, while `parser.py:460` uses `"Free text - RPE, PRs, how you felt."` as the Apple Notes HTML italic placeholder. These are different strings with different wording.
+
+**Why:** The mismatch is cosmetic and handled correctly by `_PLACEHOLDER_STRINGS` frozenset (both variants are included). But it's confusing to maintain two different placeholder texts for the same field in two formats.
+
+**Context:** Surfaced during the eng review for T11 (iPhone smart sync gate, 2026-06-15). The fix is to pick one authoritative text and use it in both `render_workout_note` and `render_workout_note_html` for the How It Went section. Would shrink the `_PLACEHOLDER_STRINGS` frozenset from 4 strings to 2 after this is harmonized.
+
+**Start:** `coach/notes/parser.py:187` and `coach/notes/parser.py:460`.
+
+**Depends on:** T11 shipped first (placeholder detection already handles the split).
 
 ---
 

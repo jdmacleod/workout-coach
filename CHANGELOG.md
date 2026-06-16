@@ -2,6 +2,26 @@
 
 All notable changes to Exercise Coach are documented here.
 
+## [0.8.0] — 2026-06-15
+
+### Added
+
+- **iPhone edits smart sync gate** — `coach sync` and `coach assess --auto-sync` now detect when a local workout file is in `planned` status and Apple Notes contains real completion content (non-placeholder "Completed" or "How It Went") that the local file lacks. The local file is updated in-place with the iPhone-entered content, and `status` is auto-set to `completed` when Notes Completed is non-empty (E1). Workouts already assessed (`status: completed` or `skipped`) are skipped efficiently with no Apple Notes fetch.
+- **"Updated N note(s)" message** — `coach assess` and `coach sync` now print separate import and update counts: "Imported N new note(s)" and "Updated N note(s) with iPhone edits" (E2). The sync verbose table shows `(N already current)` for planned notes that matched but needed no update (E3).
+- **`_maybe_update_local()`** — internal helper in `coach/notes/local.py` that fetches a note from Apple Notes, compares Completed and How It Went sections against the local file, and writes the update atomically if needed. Respects `--dry-run`.
+- **`_is_placeholder_or_empty()`** — helper that recognises all four placeholder variants (MD and HTML, Completed and How It Went) so placeholder content in Notes is never mistakenly treated as real user input.
+
+### Changed
+
+- `_sync_notes()` return type changed from `int` (imported count) to `tuple[int, int]` (imported, updated). Callers in `assess.py` and `sync.py` updated accordingly.
+- Performance gate tightened: skipped-status workouts (`status: skipped`) are now also excluded from the update check, not only completed ones.
+- `coach assess --dry-run` now correctly prints "Would update N note(s)" instead of "Updated N note(s)" when dry-run mode is active.
+
+### For contributors
+
+- 13 new tests in `tests/notes/test_local.py` covering the update gate, placeholder detection, dry-run behaviour, OSError graceful skip, and status preservation.
+- 1 new test in `tests/commands/test_assess.py` asserting the separate updated-count message is printed.
+
 ## [0.7.0] — 2026-06-15
 
 ### Added
