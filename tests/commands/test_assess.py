@@ -73,6 +73,41 @@ Felt strong.
     return path
 
 
+def _write_placeholder_workout(
+    workouts_dir: Path, date_str: str, title: str, status: str = "planned"
+) -> Path:
+    """Write a workout file whose Completed/How It Went sections are still boilerplate."""
+    workouts_dir.mkdir(parents=True, exist_ok=True)
+    slug = title.lower().replace(" ", "-")
+    note_title = f"{date_str} {title}"
+    content = f"""---
+id: wrk-{date_str.replace("-", "")}-001
+date: {date_str}
+type: strength
+subtype: upper
+status: {status}
+note_title: {note_title}
+duration_planned: 55
+source: generated
+---
+
+## Planned
+
+Bench Press: 4x5
+
+## Completed
+
+Fill in after the workout. Free text or match the planned format.
+
+## How It Went
+
+Free text - RPE, PRs, how you felt.
+"""
+    path = workouts_dir / f"{date_str}-{slug}.md"
+    path.write_text(content)
+    return path
+
+
 def test_assess_week_produces_assessment_note_with_next_week_notes(tmp_path):
     """assess --week produces an Assessment note with a non-empty ## Next Week Notes section."""
     from coach.commands.assess import _run_assess
@@ -223,6 +258,99 @@ def test_assess_week_writes_local_assessment_file(tmp_path):
     assert assessment_file.exists()
     content = assessment_file.read_text()
     assert "## Next Week Notes" in content
+
+
+def test_assess_week_marks_past_unedited_workout_skipped(tmp_path):
+    """A past-dated workout whose boilerplate was never edited is marked skipped, no LLM call."""
+    from coach.commands.assess import _run_assess
+    from coach.notes.parser import workout_from_note
+
+    cfg = _make_config(str(tmp_path))
+    mock_client = MockNotesClient()
+    provider = MockInferenceProvider(response_text=MOCK_SUMMARY_RESPONSE)
+
+    workouts_dir = tmp_path / "workouts"
+    past_monday = datetime.date.today() - datetime.timedelta(weeks=2)
+    past_monday -= datetime.timedelta(days=past_monday.weekday())
+    iso = past_monday.isocalendar()
+    week_str = f"{iso.year}-W{iso.week:02d}"
+    path = _write_placeholder_workout(workouts_dir, past_monday.isoformat(), "Upper Body")
+
+    with patch("coach.commands.assess.load_config", return_value=cfg):
+        _run_assess(
+            workout_title=None,
+            week=week_str,
+            dry_run=False,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    written = workout_from_note(path.read_text(), path.stem)
+    assert written.status == "skipped"
+    # No per-workout extraction call was made — only the (mocked) weekly summary calls remain.
+    assert all("Workout Metadata" not in c.user for c in provider.calls)
+
+
+def test_assess_week_leaves_future_unedited_workout_as_planned(tmp_path):
+    """A future-dated workout with untouched boilerplate stays planned and isn't assessed."""
+    from coach.commands.assess import _run_assess
+    from coach.notes.parser import workout_from_note
+
+    cfg = _make_config(str(tmp_path))
+    mock_client = MockNotesClient()
+    provider = MockInferenceProvider(response_text=MOCK_SUMMARY_RESPONSE)
+
+    workouts_dir = tmp_path / "workouts"
+    future_monday = datetime.date.today() + datetime.timedelta(weeks=2)
+    future_monday -= datetime.timedelta(days=future_monday.weekday())
+    iso = future_monday.isocalendar()
+    week_str = f"{iso.year}-W{iso.week:02d}"
+    path = _write_placeholder_workout(workouts_dir, future_monday.isoformat(), "Upper Body")
+
+    with patch("coach.commands.assess.load_config", return_value=cfg):
+        _run_assess(
+            workout_title=None,
+            week=week_str,
+            dry_run=False,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    written = workout_from_note(path.read_text(), path.stem)
+    assert written.status == "planned"
+    assert all("Workout Metadata" not in c.user for c in provider.calls)
+
+
+def test_assess_single_marks_past_unedited_workout_skipped(tmp_path):
+    """coach assess --workout marks a past, unedited-boilerplate workout as skipped."""
+    from coach.commands.assess import _run_assess
+    from coach.notes.parser import render_workout_note_html, workout_from_note
+    from coach.notes.schema import FOLDER_WORKOUTS
+
+    cfg = _make_config(str(tmp_path))
+    mock_client = MockNotesClient()
+    provider = MockInferenceProvider(response_text=MOCK_ASSESS_RESPONSE)
+
+    workouts_dir = tmp_path / "workouts"
+    past_date = (datetime.date.today() - datetime.timedelta(days=3)).isoformat()
+    path = _write_placeholder_workout(workouts_dir, past_date, "Upper Body")
+    title = f"{past_date} Upper Body"
+
+    placeholder_workout = workout_from_note(path.read_text(), path.stem)
+    mock_client.create_note(FOLDER_WORKOUTS, title, render_workout_note_html(placeholder_workout))
+
+    with patch("coach.commands.assess.load_config", return_value=cfg):
+        _run_assess(
+            workout_title=title,
+            week=None,
+            dry_run=False,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    written = workout_from_note(path.read_text(), path.stem)
+    assert written.status == "skipped"
+    assert len(provider.calls) == 0
 
 
 def test_sync_auto_sync_notes_down(tmp_path):

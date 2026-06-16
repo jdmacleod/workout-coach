@@ -175,9 +175,14 @@ def _parse_free_form(
                 f"[dim]Warning: LLM parse failed for '{escape(title)}' — using best-effort parse.[/dim]"
             )
 
-    # Fallback: workout_from_note + date override
+    # Fallback: workout_from_note + date override. If no ## headers matched (a
+    # truly freeform note), preserve the raw text in how_it_went instead of
+    # silently dropping it.
     base = workout_from_note(content, title)
-    return dataclasses.replace(base, date=note_date)
+    fallback_updates: dict[str, Any] = {"date": note_date}
+    if not base.completed_content and not base.how_it_went and content.strip():
+        fallback_updates["how_it_went"] = content.strip()
+    return dataclasses.replace(base, **fallback_updates)
 
 
 def _sync_notes(

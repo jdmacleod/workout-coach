@@ -288,7 +288,7 @@ def test_sync_llm_parse(tmp_path: Path) -> None:
 
 
 def test_sync_llm_fallback(tmp_path: Path) -> None:
-    """LLM returns invalid JSON → falls back to workout_from_note."""
+    """LLM returns invalid JSON → falls back to workout_from_note, raw text preserved."""
     from coach.notes.local import _sync_notes
 
     cfg = _make_cfg(tmp_path)
@@ -301,11 +301,15 @@ def test_sync_llm_fallback(tmp_path: Path) -> None:
     imported, _ = _sync_notes(cfg, client, verbose=False, provider=provider)
     assert imported == 1
     workouts_dir = tmp_path / "workouts"
-    assert any(workouts_dir.glob("2026-06-12-*.md"))
+    written = list(workouts_dir.glob("2026-06-12-*.md"))
+    assert len(written) == 1
+    content = written[0].read_text()
+    # The ad-hoc note has no ## headers, so the fallback must not drop the raw text.
+    assert "Did some squats and push-ups." in content
 
 
 def test_sync_no_provider_fallback(tmp_path: Path) -> None:
-    """Free-form note + provider=None → best-effort parse, no LLM attempt."""
+    """Free-form note + provider=None → best-effort parse, no LLM attempt, raw text preserved."""
     from coach.notes.local import _sync_notes
 
     cfg = _make_cfg(tmp_path)
@@ -321,6 +325,9 @@ def test_sync_no_provider_fallback(tmp_path: Path) -> None:
     content = written[0].read_text()
     # Date from title should be used, not 1970-01-01
     assert "2026-06-12" in content
+    # No headers in the raw note, so the fallback must preserve the text rather
+    # than silently dropping it.
+    assert "Did squats and lunges for 30 minutes." in content
 
 
 def test_sync_invalid_calendar_date_skipped(tmp_path: Path) -> None:
