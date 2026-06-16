@@ -527,7 +527,7 @@ def _run_plan(
 
     # Build prompt
     monday = _week_to_monday(target_week)
-    days_of_week = [(monday + datetime.timedelta(days=i)).strftime("%a") for i in range(7)]
+    days_of_week = [(monday + datetime.timedelta(days=i)).strftime("%a %b %-d") for i in range(7)]
     available_days = ", ".join(days_of_week)
 
     equipment_constraint = (
@@ -642,6 +642,20 @@ def _run_plan(
             note_title=note_title,
         )
         workouts.append(w)
+
+    # Deduplicate by date: keep the first session per date, warn on extras.
+    seen_dates: set[datetime.date] = set()
+    deduped: list[Workout] = []
+    for w in workouts:
+        if w.type == "rest" or w.date not in seen_dates:
+            deduped.append(w)
+            seen_dates.add(w.date)
+        else:
+            console.print(
+                f"[yellow]Warning: duplicate session on {w.date.isoformat()} "
+                f"('{w.note_title}') dropped — LLM assigned two sessions to the same day.[/yellow]"
+            )
+    workouts = deduped
 
     # Python duration clamp (deterministic, runs after correction pass)
     if max_duration:

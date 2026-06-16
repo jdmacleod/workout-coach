@@ -30,6 +30,7 @@ Injury notes: {profile_injury_notes}
 
 ## Constraints
 - Generate exactly {profile_days_per_week} training sessions. Do NOT include rest days, active recovery sessions, or off-days in the JSON. Unscheduled days are implicitly rest days.
+- Each day may have AT MOST ONE session. Do not assign two sessions to the same day.
 - No high-intensity session the day after a session with recovery_cost >= 3
 - Match weekly volume to recent history (avoid >10% load increase)
 {equipment_constraint}{duration_constraint}
