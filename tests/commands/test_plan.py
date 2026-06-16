@@ -215,6 +215,54 @@ def test_plan_overwrite_updates_plan_note_as_html(tmp_path):
     assert "<h2>Schedule</h2>" in body  # raw stored body is HTML
 
 
+def test_plan_overwrite_includes_note_links(tmp_path):
+    """coach plan --overwrite includes applenotes:// links in the plan note when plan_note_links=True."""
+    from unittest.mock import patch
+
+    from coach.commands.plan import _run_plan
+
+    cfg = _make_config(str(tmp_path))
+    cfg.notes.plan_note_links = True
+    (tmp_path / "training-info.md").write_text("# Training Info\nGeneral fitness.")
+
+    mock_client = MockNotesClient()
+    provider = MockInferenceProvider(response_text=MOCK_PLAN_RESPONSE)
+    with (
+        patch("coach.commands.plan.load_config", return_value=cfg),
+        patch("coach.notes.sqlite.lookup_uuids", return_value={}),
+    ):
+        _run_plan(
+            week="2026-W23",
+            focus=None,
+            dry_run=False,
+            overwrite=False,
+            no_calendar=True,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    # Overwrite: re-push plan with no LLM call
+    provider2 = MockInferenceProvider(response_text=MOCK_PLAN_RESPONSE)
+    with (
+        patch("coach.commands.plan.load_config", return_value=cfg),
+        patch("coach.notes.sqlite.lookup_uuids", return_value={}),
+    ):
+        _run_plan(
+            week="2026-W23",
+            focus=None,
+            dry_run=False,
+            overwrite=True,
+            no_calendar=True,
+            notes_client=mock_client,
+            inference_provider=provider2,
+        )
+
+    assert len(provider2.calls) == 0  # no LLM on overwrite
+    plan_title = next(n for n in mock_client.list_notes(FOLDER_PLANS) if "W23" in n)
+    body = mock_client._store[(FOLDER_PLANS, plan_title)]
+    assert "applenotes://showNote?identifier=" in body
+
+
 def test_plan_next_week_notes_injected_from_prior_assessment(tmp_path):
     """coach plan injects Next Week Notes from the prior assessment into the prompt."""
     from coach.commands.plan import _run_plan

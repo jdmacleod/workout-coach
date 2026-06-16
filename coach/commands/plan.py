@@ -927,21 +927,39 @@ def _push_plan_to_notes(
         generation_notes=sections.get("Generation Notes") or None,
     )
 
-    # Push workout notes: create any that are missing, update existing ones
+    # Push workout notes: create any that are missing, update existing ones.
+    # Collect xcids so we can build note_urls for the plan note links.
     client.ensure_folder(FOLDER_WORKOUTS)
+    note_xcids: dict[str, str] = {}
     for w in workouts:
         if not w.note_title or w.type == "rest":
             continue
         note_html = render_workout_note_html(w)
         if client.note_exists(FOLDER_WORKOUTS, w.note_title):
             client.update_note(FOLDER_WORKOUTS, w.note_title, note_html)
+            xcid = client.get_note_id(FOLDER_WORKOUTS, w.note_title)
         else:
-            client.create_note(FOLDER_WORKOUTS, w.note_title, note_html)
+            xcid = client.create_note(FOLDER_WORKOUTS, w.note_title, note_html)
+        if xcid and w.note_title:
+            note_xcids[w.note_title] = xcid
+
+    # Build applenotes:// deep links if plan_note_links is enabled
+    note_urls: dict[str, str] = {}
+    if cfg.notes.plan_note_links and note_xcids:
+        from coach.notes.sqlite import _url_id, lookup_uuids
+
+        pks = {title: _url_id(xcid) for title, xcid in note_xcids.items()}
+        uuid_map = lookup_uuids([pk for pk in pks.values() if pk])
+        for title, pk in pks.items():
+            uuid = uuid_map.get(pk, "")
+            identifier = uuid or pk
+            if identifier:
+                note_urls[title] = f"applenotes://showNote?identifier={identifier}"
 
     # Push plan note: create if missing, update if existing
     plan_title = plan_note_title(week)
     client.ensure_folder(FOLDER_PLANS)
-    plan_html = render_plan_note_html(plan)
+    plan_html = render_plan_note_html(plan, note_urls or None)
     if client.note_exists(FOLDER_PLANS, plan_title):
         client.update_note(FOLDER_PLANS, plan_title, plan_html)
     else:
