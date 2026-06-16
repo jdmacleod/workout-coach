@@ -264,7 +264,7 @@ def _sync_notes(
             except (OSError, ValueError):
                 local_status = "completed"
 
-            if local_status == "completed":
+            if local_status != "planned":
                 rows.append((title, f"{workouts_dir_rel}/{filename}", "already local"))
                 continue
 

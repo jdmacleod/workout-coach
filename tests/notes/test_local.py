@@ -711,8 +711,6 @@ def test_e3_verbose_already_current_count(tmp_path: Path) -> None:
 
 def test_performance_gate_oserror_skips_gracefully(tmp_path: Path) -> None:
     """When local file is unreadable (OSError), update gate is skipped (treated as assessed)."""
-    import os
-
     from coach.notes.local import _sync_notes
 
     cfg = _make_cfg(tmp_path)
