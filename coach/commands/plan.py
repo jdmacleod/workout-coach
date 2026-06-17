@@ -6,6 +6,8 @@ import dataclasses
 import datetime
 import json
 import random
+import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Any, cast
 
@@ -450,6 +452,92 @@ def _reassign_workout_date(w: Workout, new_date: datetime.date) -> Workout:
     return dataclasses.replace(w, date=new_date, note_title=new_note_title, id=new_id)
 
 
+_WEEKDAY_NAMES: dict[str, int] = {
+    "monday": 0,
+    "mon": 0,
+    "tuesday": 1,
+    "tue": 1,
+    "tues": 1,
+    "wednesday": 2,
+    "wed": 2,
+    "thursday": 3,
+    "thu": 3,
+    "thur": 3,
+    "thurs": 3,
+    "friday": 4,
+    "fri": 4,
+    "saturday": 5,
+    "sat": 5,
+    "sunday": 6,
+    "sun": 6,
+}
+
+
+def _extract_weekdays(text: str) -> set[int]:
+    """Return the set of weekday indices (Mon=0..Sun=6) named anywhere in free text."""
+    found: set[int] = set()
+    for word in re.findall(r"[A-Za-z]+", text):
+        weekday = _WEEKDAY_NAMES.get(word.lower())
+        if weekday is not None:
+            found.add(weekday)
+    return found
+
+
+def _parse_schedule_constraints(training_info: str) -> tuple[set[int] | None, set[int]]:
+    """Best-effort extraction of day-of-week constraints from training-info.md.
+
+    training-info.md is freeform, user-edited markdown, not a strict schema, so
+    parsing here is lenient and falls back to "no constraint" when nothing
+    recognizable is found.
+
+    Returns (available_days, blocked_days):
+      - available_days: weekday indices explicitly named on an "Available days"
+        line in ## Schedule Constraints, or None if no such line is found
+        (meaning no day-of-week restriction).
+      - blocked_days: weekday indices mentioned in ## Recurring External Classes
+        (e.g. a standing class), used as a soft preference to avoid, not a hard
+        block.
+    """
+    sections = parse_sections(training_info)
+
+    available_days: set[int] | None = None
+    for line in sections.get("Schedule Constraints", "").splitlines():
+        if "available day" in line.lower():
+            available_days = _extract_weekdays(line)
+            break
+
+    classes_text = sections.get("Recurring External Classes", "").strip()
+    blocked_days = (
+        set() if classes_text.lower().startswith("none") else _extract_weekdays(classes_text)
+    )
+
+    return available_days, blocked_days
+
+
+def _pick_reassignment_day(
+    week_dates: list[datetime.date],
+    seen_dates: set[datetime.date],
+    available_days: set[int] | None,
+    blocked_days: set[int],
+) -> datetime.date | None:
+    """Pick the best open day for a reassigned session.
+
+    Prefers days within the user's stated availability (Schedule Constraints)
+    and outside recurring external class days, but falls back to any open day
+    in the week rather than dropping the session.
+    """
+    tiers: tuple[Callable[[int], bool], ...] = (
+        lambda wd: (available_days is None or wd in available_days) and wd not in blocked_days,
+        lambda wd: available_days is None or wd in available_days,
+        lambda wd: True,
+    )
+    for predicate in tiers:
+        for d in week_dates:
+            if d not in seen_dates and predicate(d.weekday()):
+                return d
+    return None
+
+
 def _run_plan(
     *,
     week: str | None,
@@ -656,7 +744,10 @@ def _run_plan(
     # Resolve same-day collisions: when the LLM assigns two sessions to the same
     # date, reassign the extra to the next open day in the week instead of
     # dropping it, so the session count keeps matching fitness_days_per_week.
+    # The replacement day respects training-info.md's Schedule Constraints
+    # (available days) and Recurring External Classes where possible.
     week_dates = [monday_date + datetime.timedelta(days=i) for i in range(7)]
+    schedule_available_days, schedule_blocked_days = _parse_schedule_constraints(training_info)
     seen_dates: set[datetime.date] = set()
     deduped: list[Workout] = []
     for w in workouts:
@@ -667,7 +758,9 @@ def _run_plan(
             deduped.append(w)
             seen_dates.add(w.date)
             continue
-        open_day = next((d for d in week_dates if d not in seen_dates), None)
+        open_day = _pick_reassignment_day(
+            week_dates, seen_dates, schedule_available_days, schedule_blocked_days
+        )
         if open_day is None:
             console.print(
                 f"[yellow]Warning: duplicate session on {w.date.isoformat()} "
