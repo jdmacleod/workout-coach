@@ -287,6 +287,42 @@ def test_sync_llm_parse(tmp_path: Path) -> None:
     assert len(provider.calls) == 1
 
 
+def test_sync_llm_parse_preserves_structured_sections(tmp_path: Path) -> None:
+    """Ad-hoc note with ## Planned/## Completed + LLM provider → sections kept, status flips."""
+    from coach.notes.local import _sync_notes
+
+    cfg = _make_cfg(tmp_path)
+    client = MockNotesClient()
+    title = "2026-06-12 Hotel Gym"
+    _put_note(
+        client,
+        title,
+        "## Planned\n\nSquats 5x5, push-ups 3x10.\n\n"
+        "## Completed\n\nSquats 5x5 @ 185lb, push-ups 3x10.\n\n"
+        "## How It Went\n\nFelt great, hit all reps.\n",
+    )
+
+    llm_response = json.dumps(
+        {"type": "strength", "duration_actual": 40, "rpe": 6.5, "description": "Hotel gym session"}
+    )
+    provider = MockInferenceProvider(response_text=llm_response)
+
+    imported, _ = _sync_notes(cfg, client, verbose=False, provider=provider)
+    assert imported == 1
+    workouts_dir = tmp_path / "workouts"
+    written = list(workouts_dir.glob("2026-06-12-*.md"))
+    assert len(written) == 1
+    content = written[0].read_text()
+
+    # The user's own Planned/Completed/How It Went content must survive, not be
+    # clobbered by the LLM's narrow extraction.
+    assert "Squats 5x5, push-ups 3x10." in content
+    assert "Squats 5x5 @ 185lb, push-ups 3x10." in content
+    assert "Felt great, hit all reps." in content
+    # Real completed content present → status should flip from the default "planned".
+    assert "status: completed" in content
+
+
 def test_sync_llm_fallback(tmp_path: Path) -> None:
     """LLM returns invalid JSON → falls back to workout_from_note, raw text preserved."""
     from coach.notes.local import _sync_notes

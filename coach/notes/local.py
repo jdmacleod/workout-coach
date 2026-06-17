@@ -157,7 +157,7 @@ def _parse_free_form(
                 raise ValueError("LLM returned non-object JSON")
             result: dict[str, Any] = parsed
 
-            base = workout_from_note("", title)
+            base = workout_from_note(content, title)
             updates: dict[str, Any] = {"date": note_date}
 
             if result.get("type") in _VALID_WORKOUT_TYPES:
@@ -166,8 +166,14 @@ def _parse_free_form(
                 updates["duration_actual"] = int(result["duration_actual"])
             if result.get("rpe") is not None:
                 updates["rpe"] = float(result["rpe"])
-            if result.get("description"):
+            if result.get("description") and _is_placeholder_or_empty(base.how_it_went):
                 updates["how_it_went"] = str(result["description"])
+
+            has_real_content = not _is_placeholder_or_empty(
+                base.completed_content
+            ) or not _is_placeholder_or_empty(updates.get("how_it_went", base.how_it_went))
+            if base.status == "planned" and has_real_content and note_date < datetime.date.today():
+                updates["status"] = "completed"
 
             return dataclasses.replace(base, **updates)
         except (json.JSONDecodeError, ValueError, KeyError, TypeError, AttributeError):
