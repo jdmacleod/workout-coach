@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import dataclasses
 import datetime
 from pathlib import Path
 from typing import Annotated, Any
@@ -22,7 +24,7 @@ from coach.intelligence.provider import InferenceProvider, InferenceRequest, get
 from coach.models.workout import Workout
 from coach.notes.client import NotesClient
 from coach.notes.exceptions import NoteNotFoundError, NotesClientError
-from coach.notes.local import _sync_notes, _write_local_workout
+from coach.notes.local import _is_placeholder_or_empty, _sync_notes, _write_local_workout
 from coach.notes.parser import (
     parse_sections,
     render_assessment_note,
@@ -90,9 +92,14 @@ def _run_assess(
 
     if cfg.notes.auto_sync:
         try:
-            synced = _sync_notes(cfg, client, verbose=False, provider=provider, dry_run=dry_run)
-            if synced > 0:
-                console.print(f"[dim]Imported {synced} new note(s) from Apple Notes.[/dim]")
+            imported, updated = _sync_notes(
+                cfg, client, verbose=False, provider=provider, dry_run=dry_run
+            )
+            if imported > 0:
+                console.print(f"[dim]Imported {imported} new note(s) from Apple Notes.[/dim]")
+            if updated > 0:
+                verb = "Would update" if dry_run else "Updated"
+                console.print(f"[dim]{verb} {updated} note(s) with iPhone edits.[/dim]")
         except (NotesClientError, OSError):
             console.print(
                 "[dim]Warning: Apple Notes unavailable — skipping auto-sync. "
@@ -139,8 +146,6 @@ def _assess_single(
     that user edits in Notes are captured. Structured metadata (date, type,
     status, etc.) is loaded from the local file where YAML front matter lives.
     """
-    import dataclasses
-
     try:
         content = client.get_note(FOLDER_WORKOUTS, title)
     except NoteNotFoundError:
@@ -156,9 +161,40 @@ def _assess_single(
     else:
         workout = dataclasses.replace(
             local_workout,
+            planned_content=sections.get("Planned") or local_workout.planned_content,
             completed_content=sections.get("Completed") or local_workout.completed_content,
             how_it_went=sections.get("How It Went") or local_workout.how_it_went,
         )
+
+    if workout.date > datetime.date.today():
+        console.print(
+            f"[dim]{title} — workout is in the future ({workout.date.isoformat()}); "
+            "skipping assessment.[/dim]"
+        )
+        return
+
+    if (
+        workout.status == "planned"
+        and _is_placeholder_or_empty(workout.completed_content)
+        and _is_placeholder_or_empty(workout.how_it_went)
+    ):
+        if workout.date >= datetime.date.today():
+            console.print(
+                f"[dim]{title} — no completion data yet (date hasn't passed); "
+                "leaving as planned.[/dim]"
+            )
+            return
+
+        if dry_run:
+            console.print(f"[bold]{title}[/bold]")
+            console.print("  status: skipped (boilerplate never filled in)")
+            return
+
+        skipped_workout = dataclasses.replace(workout, status="skipped")
+        _write_local_workout(workouts_dir, skipped_workout)
+        client.update_note(FOLDER_WORKOUTS, title, render_workout_note_html(skipped_workout))
+        console.print(f"[yellow]Marked skipped:[/yellow] {title} — boilerplate never filled in")
+        return
 
     with console.status(f"Extracting metrics: {title}...", spinner="dots"):
         result = _extract_metrics(provider, workout)
@@ -210,8 +246,31 @@ def _assess_week(
     # Assess each completed workout
     assessed: list[tuple[Workout, dict[str, Any]]] = []
     for w in weekly_workouts:
-        if not w.completed_content and not w.how_it_went:
-            console.print(f"  [dim]Skipping {w.note_title} — no completion data[/dim]")
+        if w.date > datetime.date.today():
+            console.print(f"  [dim]Skipping {w.note_title} — workout is in the future[/dim]")
+            continue
+
+        untouched = _is_placeholder_or_empty(w.completed_content) and _is_placeholder_or_empty(
+            w.how_it_went
+        )
+        if untouched and w.status == "planned":
+            if w.date >= datetime.date.today():
+                console.print(f"  [dim]Skipping {w.note_title} — no completion data yet[/dim]")
+                continue
+
+            skipped_workout = dataclasses.replace(w, status="skipped")
+            assessed.append((skipped_workout, {"status": "skipped"}))
+            console.print(f"  [yellow]Marked skipped:[/yellow] {w.note_title}")
+
+            if not dry_run:
+                _write_local_workout(workouts_dir, skipped_workout)
+                if w.note_title:
+                    with contextlib.suppress(NoteNotFoundError):
+                        client.update_note(
+                            FOLDER_WORKOUTS,
+                            w.note_title,
+                            render_workout_note_html(skipped_workout),
+                        )
             continue
 
         label = w.note_title or w.date.isoformat()
@@ -223,8 +282,6 @@ def _assess_week(
         if not dry_run:
             _write_local_workout(workouts_dir, updated)
             if w.note_title:
-                import contextlib
-
                 with contextlib.suppress(NoteNotFoundError):
                     client.update_note(
                         FOLDER_WORKOUTS, w.note_title, render_workout_note_html(updated)

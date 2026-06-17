@@ -215,6 +215,54 @@ def test_plan_overwrite_updates_plan_note_as_html(tmp_path):
     assert "<h2>Schedule</h2>" in body  # raw stored body is HTML
 
 
+def test_plan_overwrite_includes_note_links(tmp_path):
+    """coach plan --overwrite includes applenotes:// links in the plan note when plan_note_links=True."""
+    from unittest.mock import patch
+
+    from coach.commands.plan import _run_plan
+
+    cfg = _make_config(str(tmp_path))
+    cfg.notes.plan_note_links = True
+    (tmp_path / "training-info.md").write_text("# Training Info\nGeneral fitness.")
+
+    mock_client = MockNotesClient()
+    provider = MockInferenceProvider(response_text=MOCK_PLAN_RESPONSE)
+    with (
+        patch("coach.commands.plan.load_config", return_value=cfg),
+        patch("coach.notes.sqlite.lookup_uuids", return_value={}),
+    ):
+        _run_plan(
+            week="2026-W23",
+            focus=None,
+            dry_run=False,
+            overwrite=False,
+            no_calendar=True,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    # Overwrite: re-push plan with no LLM call
+    provider2 = MockInferenceProvider(response_text=MOCK_PLAN_RESPONSE)
+    with (
+        patch("coach.commands.plan.load_config", return_value=cfg),
+        patch("coach.notes.sqlite.lookup_uuids", return_value={}),
+    ):
+        _run_plan(
+            week="2026-W23",
+            focus=None,
+            dry_run=False,
+            overwrite=True,
+            no_calendar=True,
+            notes_client=mock_client,
+            inference_provider=provider2,
+        )
+
+    assert len(provider2.calls) == 0  # no LLM on overwrite
+    plan_title = next(n for n in mock_client.list_notes(FOLDER_PLANS) if "W23" in n)
+    body = mock_client._store[(FOLDER_PLANS, plan_title)]
+    assert "applenotes://showNote?identifier=" in body
+
+
 def test_plan_next_week_notes_injected_from_prior_assessment(tmp_path):
     """coach plan injects Next Week Notes from the prior assessment into the prompt."""
     from coach.commands.plan import _run_plan
@@ -475,3 +523,220 @@ def test_plan_live_writes_file_for_slash_in_title(tmp_path):
     written = list((tmp_path / "workouts").glob("*.md"))
     assert len(written) == 1, f"Expected 1 workout file, got: {written}"
     assert "/" not in written[0].name, f"Filename contains '/': {written[0].name}"
+
+
+def test_plan_reassigns_same_day_sessions_to_open_day(tmp_path):
+    """When the LLM returns two sessions on the same day, the extra is moved to an
+    open day in the week rather than dropped, so fitness_days_per_week is honored."""
+    from coach.commands.plan import _run_plan
+    from coach.notes.schema import FOLDER_WORKOUTS
+
+    duplicate_day_plan = json.dumps(
+        {
+            "training_focus": "strength",
+            "weekly_volume": "moderate",
+            "generation_notes": "Test plan with duplicate Monday.",
+            "sessions": [
+                {
+                    "day": "Mon",
+                    "type": "strength",
+                    "subtype": "upper",
+                    "duration_minutes": 55,
+                    "title": "Upper Body Push",
+                    "planned_content": "Bench 4x5",
+                    "rationale": "",
+                },
+                {
+                    "day": "Mon",
+                    "type": "strength",
+                    "subtype": "lower",
+                    "duration_minutes": 55,
+                    "title": "Lower Body",
+                    "planned_content": "Squat 4x5",
+                    "rationale": "",
+                },
+                {
+                    "day": "Wed",
+                    "type": "cardio",
+                    "subtype": "zone2",
+                    "duration_minutes": 45,
+                    "title": "Zone 2 Run",
+                    "planned_content": "Easy run",
+                    "rationale": "",
+                },
+            ],
+        }
+    )
+
+    cfg = _make_config(str(tmp_path))
+    (tmp_path / "training-info.md").write_text("# Training Info\nGeneral fitness.")
+    mock_client = MockNotesClient()
+    provider = MockInferenceProvider(response_text=duplicate_day_plan)
+
+    with patch("coach.commands.plan.load_config", return_value=cfg):
+        _run_plan(
+            week="2026-W25",
+            focus=None,
+            dry_run=False,
+            overwrite=False,
+            no_calendar=True,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    workout_files = list((tmp_path / "workouts").glob("*.md"))
+    workout_notes = mock_client.list_notes(FOLDER_WORKOUTS)
+
+    # All 3 sessions should be kept, just spread across distinct days.
+    assert len(workout_files) == 3, f"Expected 3 workout files, got: {workout_files}"
+    assert len(workout_notes) == 3, f"Expected 3 workout notes, got: {workout_notes}"
+
+    # Mon still has Upper Body Push (first claim on that date).
+    mon_files = [f for f in workout_files if "2026-06-15" in f.name]
+    assert len(mon_files) == 1
+    assert "upper-body-push" in mon_files[0].name
+
+    # Lower Body was moved off Monday to the next open day (Tuesday), not dropped.
+    lower_body_files = [f for f in workout_files if "lower-body" in f.name]
+    assert len(lower_body_files) == 1
+    assert "2026-06-15" not in lower_body_files[0].name
+    assert "2026-06-16" in lower_body_files[0].name
+
+    # Wed keeps its original session, untouched by the collision.
+    wed_files = [f for f in workout_files if "2026-06-17" in f.name]
+    assert len(wed_files) == 1
+    assert "zone-2-run" in wed_files[0].name
+
+
+def test_plan_collision_reassignment_respects_available_days(tmp_path):
+    """A collision should skip days excluded by training-info.md's Schedule
+    Constraints 'Available days' line, not just the nearest chronological day."""
+    from coach.commands.plan import _run_plan
+    from coach.notes.schema import FOLDER_WORKOUTS
+
+    duplicate_day_plan = json.dumps(
+        {
+            "training_focus": "strength",
+            "weekly_volume": "moderate",
+            "generation_notes": "Test plan with duplicate Monday.",
+            "sessions": [
+                {
+                    "day": "Mon",
+                    "type": "strength",
+                    "subtype": "upper",
+                    "duration_minutes": 55,
+                    "title": "Upper Body Push",
+                    "planned_content": "Bench 4x5",
+                    "rationale": "",
+                },
+                {
+                    "day": "Mon",
+                    "type": "strength",
+                    "subtype": "lower",
+                    "duration_minutes": 55,
+                    "title": "Lower Body",
+                    "planned_content": "Squat 4x5",
+                    "rationale": "",
+                },
+            ],
+        }
+    )
+
+    cfg = _make_config(str(tmp_path))
+    (tmp_path / "training-info.md").write_text(
+        "# Training Info\n\n"
+        "## Schedule Constraints\n\n"
+        "- Available days: Monday, Wednesday, Thursday, Saturday, Sunday\n"
+    )
+    mock_client = MockNotesClient()
+    provider = MockInferenceProvider(response_text=duplicate_day_plan)
+
+    with patch("coach.commands.plan.load_config", return_value=cfg):
+        _run_plan(
+            week="2026-W25",
+            focus=None,
+            dry_run=False,
+            overwrite=False,
+            no_calendar=True,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    workout_files = list((tmp_path / "workouts").glob("*.md"))
+    workout_notes = mock_client.list_notes(FOLDER_WORKOUTS)
+
+    assert len(workout_files) == 2, f"Expected 2 workout files, got: {workout_files}"
+    assert len(workout_notes) == 2
+
+    # Lower Body must skip Tuesday (2026-06-16, not in Available days) and land
+    # on Wednesday (2026-06-17, the next day that *is* available).
+    lower_body_files = [f for f in workout_files if "lower-body" in f.name]
+    assert len(lower_body_files) == 1
+    assert "2026-06-16" not in lower_body_files[0].name
+    assert "2026-06-17" in lower_body_files[0].name
+
+
+def test_plan_collision_reassignment_avoids_recurring_class_day(tmp_path):
+    """A collision should prefer skipping days with a recurring external class
+    over the nearest chronological day, when another open day exists."""
+    from coach.commands.plan import _run_plan
+    from coach.notes.schema import FOLDER_WORKOUTS
+
+    duplicate_day_plan = json.dumps(
+        {
+            "training_focus": "strength",
+            "weekly_volume": "moderate",
+            "generation_notes": "Test plan with duplicate Monday.",
+            "sessions": [
+                {
+                    "day": "Mon",
+                    "type": "strength",
+                    "subtype": "upper",
+                    "duration_minutes": 55,
+                    "title": "Upper Body Push",
+                    "planned_content": "Bench 4x5",
+                    "rationale": "",
+                },
+                {
+                    "day": "Mon",
+                    "type": "strength",
+                    "subtype": "lower",
+                    "duration_minutes": 55,
+                    "title": "Lower Body",
+                    "planned_content": "Squat 4x5",
+                    "rationale": "",
+                },
+            ],
+        }
+    )
+
+    cfg = _make_config(str(tmp_path))
+    (tmp_path / "training-info.md").write_text(
+        "# Training Info\n\n## Recurring External Classes\n\n- Tuesday 6pm: Pilates class\n"
+    )
+    mock_client = MockNotesClient()
+    provider = MockInferenceProvider(response_text=duplicate_day_plan)
+
+    with patch("coach.commands.plan.load_config", return_value=cfg):
+        _run_plan(
+            week="2026-W25",
+            focus=None,
+            dry_run=False,
+            overwrite=False,
+            no_calendar=True,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    workout_files = list((tmp_path / "workouts").glob("*.md"))
+    workout_notes = mock_client.list_notes(FOLDER_WORKOUTS)
+
+    assert len(workout_files) == 2, f"Expected 2 workout files, got: {workout_files}"
+    assert len(workout_notes) == 2
+
+    # Lower Body should skip Tuesday (recurring Pilates class) and land on
+    # Wednesday instead, since no Schedule Constraints restrict availability.
+    lower_body_files = [f for f in workout_files if "lower-body" in f.name]
+    assert len(lower_body_files) == 1
+    assert "2026-06-16" not in lower_body_files[0].name
+    assert "2026-06-17" in lower_body_files[0].name

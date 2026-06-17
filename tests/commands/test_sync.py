@@ -61,7 +61,7 @@ def test_sync_cli_no_notes(tmp_path: Path) -> None:
         result = runner.invoke(app, ["sync"])
 
     assert result.exit_code == 0
-    assert "0 unsynced" in result.output
+    assert "0 new, 0 updated" in result.output
 
 
 def test_sync_cli_happy_path(tmp_path: Path) -> None:
@@ -80,7 +80,7 @@ def test_sync_cli_happy_path(tmp_path: Path) -> None:
         result = runner.invoke(app, ["sync"])
 
     assert result.exit_code == 0
-    assert "1 unsynced" in result.output
+    assert "1 new" in result.output
     assert (tmp_path / "workouts" / "2026-06-12-hotel-gym.md").exists()
 
 
@@ -119,7 +119,7 @@ def test_sync_cli_since_flag(tmp_path: Path) -> None:
         result = runner.invoke(app, ["sync", "--since", "2026-06-01"])
 
     assert result.exit_code == 0
-    assert "1 unsynced" in result.output
+    assert "1 new" in result.output
     workouts_dir = tmp_path / "workouts"
     assert not (workouts_dir / "2026-05-01-old.md").exists()
     assert (workouts_dir / "2026-06-10-new.md").exists()

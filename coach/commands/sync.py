@@ -45,8 +45,8 @@ def _run_sync(
     dry_run: bool,
     since_str: str | None,
     notes_client: NotesClient | None = None,
-) -> int:
-    """Core sync logic, injectable for testing. Returns synced count."""
+) -> tuple[int, int]:
+    """Core sync logic, injectable for testing. Returns (imported, updated) counts."""
     cfg = load_config()
 
     since: datetime.date | None = None

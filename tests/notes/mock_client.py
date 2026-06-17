@@ -8,13 +8,26 @@ class MockNotesClient(NotesClient):
     get_note applies _strip_html() on return to match the real NotesClient, which
     always strips the HTML that Apple Notes returns. This means tests can write HTML
     notes and read back plaintext (with semantic tags converted to Markdown equivalents).
+
+    create_note returns a fake x-coredata xcid ("x-coredata://mock/ICNote/pN") so that
+    callers that build note_urls from xcids work correctly in tests.
     """
 
     def __init__(self) -> None:
         self._store: dict[tuple[str, str], str] = {}
+        self._xcids: dict[tuple[str, str], str] = {}
+        self._next_id: int = 1
 
-    def create_note(self, folder: str, title: str, body: str) -> None:
-        self._store[(folder, title)] = body
+    def create_note(self, folder: str, title: str, body: str) -> str | None:
+        key = (folder, title)
+        self._store[key] = body
+        xcid = f"x-coredata://mock/ICNote/p{self._next_id}"
+        self._xcids[key] = xcid
+        self._next_id += 1
+        return xcid
+
+    def get_note_id(self, folder: str, title: str) -> str | None:
+        return self._xcids.get((folder, title))
 
     def get_note(self, folder: str, title: str) -> str:
         key = (folder, title)

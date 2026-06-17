@@ -204,6 +204,23 @@ end tell
                 raise NoteNotFoundError(title) from e
             raise
 
+    def get_note_id(self, folder: str, title: str) -> str | None:
+        """Return the x-coredata ID of an existing note, or None if not found."""
+        account_esc = _escape_for_applescript(self._account)
+        title_esc = _escape_for_applescript(title)
+        setup = "\n".join(_folder_script_lines(folder, account_esc))
+        script = f"""tell application "Notes"
+{setup}
+    set theNote to first note of targetFolder whose name is "{title_esc}"
+    return id of theNote
+end tell
+"""
+        try:
+            result = _run_applescript(script)
+            return result if result else None
+        except NotesClientError:
+            return None
+
     def note_exists(self, folder: str, title: str) -> bool:
         """Return True if a note with the given title exists in the folder."""
         account_esc = _escape_for_applescript(self._account)

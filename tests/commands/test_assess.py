@@ -73,6 +73,41 @@ Felt strong.
     return path
 
 
+def _write_placeholder_workout(
+    workouts_dir: Path, date_str: str, title: str, status: str = "planned"
+) -> Path:
+    """Write a workout file whose Completed/How It Went sections are still boilerplate."""
+    workouts_dir.mkdir(parents=True, exist_ok=True)
+    slug = title.lower().replace(" ", "-")
+    note_title = f"{date_str} {title}"
+    content = f"""---
+id: wrk-{date_str.replace("-", "")}-001
+date: {date_str}
+type: strength
+subtype: upper
+status: {status}
+note_title: {note_title}
+duration_planned: 55
+source: generated
+---
+
+## Planned
+
+Bench Press: 4x5
+
+## Completed
+
+Fill in after the workout. Free text or match the planned format.
+
+## How It Went
+
+Free text - RPE, PRs, how you felt.
+"""
+    path = workouts_dir / f"{date_str}-{slug}.md"
+    path.write_text(content)
+    return path
+
+
 def test_assess_week_produces_assessment_note_with_next_week_notes(tmp_path):
     """assess --week produces an Assessment note with a non-empty ## Next Week Notes section."""
     from coach.commands.assess import _run_assess
@@ -225,6 +260,281 @@ def test_assess_week_writes_local_assessment_file(tmp_path):
     assert "## Next Week Notes" in content
 
 
+def test_assess_week_marks_past_unedited_workout_skipped(tmp_path):
+    """A past-dated workout whose boilerplate was never edited is marked skipped, no LLM call."""
+    from coach.commands.assess import _run_assess
+    from coach.notes.parser import workout_from_note
+
+    cfg = _make_config(str(tmp_path))
+    mock_client = MockNotesClient()
+    provider = MockInferenceProvider(response_text=MOCK_SUMMARY_RESPONSE)
+
+    workouts_dir = tmp_path / "workouts"
+    past_monday = datetime.date.today() - datetime.timedelta(weeks=2)
+    past_monday -= datetime.timedelta(days=past_monday.weekday())
+    iso = past_monday.isocalendar()
+    week_str = f"{iso.year}-W{iso.week:02d}"
+    path = _write_placeholder_workout(workouts_dir, past_monday.isoformat(), "Upper Body")
+
+    with patch("coach.commands.assess.load_config", return_value=cfg):
+        _run_assess(
+            workout_title=None,
+            week=week_str,
+            dry_run=False,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    written = workout_from_note(path.read_text(), path.stem)
+    assert written.status == "skipped"
+    # No per-workout extraction call was made — only the (mocked) weekly summary calls remain.
+    assert all("Workout Metadata" not in c.user for c in provider.calls)
+
+
+def test_assess_week_leaves_future_unedited_workout_as_planned(tmp_path):
+    """A future-dated workout with untouched boilerplate stays planned and isn't assessed."""
+    from coach.commands.assess import _run_assess
+    from coach.notes.parser import workout_from_note
+
+    cfg = _make_config(str(tmp_path))
+    mock_client = MockNotesClient()
+    provider = MockInferenceProvider(response_text=MOCK_SUMMARY_RESPONSE)
+
+    workouts_dir = tmp_path / "workouts"
+    future_monday = datetime.date.today() + datetime.timedelta(weeks=2)
+    future_monday -= datetime.timedelta(days=future_monday.weekday())
+    iso = future_monday.isocalendar()
+    week_str = f"{iso.year}-W{iso.week:02d}"
+    path = _write_placeholder_workout(workouts_dir, future_monday.isoformat(), "Upper Body")
+
+    with patch("coach.commands.assess.load_config", return_value=cfg):
+        _run_assess(
+            workout_title=None,
+            week=week_str,
+            dry_run=False,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    written = workout_from_note(path.read_text(), path.stem)
+    assert written.status == "planned"
+    assert all("Workout Metadata" not in c.user for c in provider.calls)
+
+
+def test_assess_single_marks_past_unedited_workout_skipped(tmp_path):
+    """coach assess --workout marks a past, unedited-boilerplate workout as skipped."""
+    from coach.commands.assess import _run_assess
+    from coach.notes.parser import render_workout_note_html, workout_from_note
+    from coach.notes.schema import FOLDER_WORKOUTS
+
+    cfg = _make_config(str(tmp_path))
+    mock_client = MockNotesClient()
+    provider = MockInferenceProvider(response_text=MOCK_ASSESS_RESPONSE)
+
+    workouts_dir = tmp_path / "workouts"
+    past_date = (datetime.date.today() - datetime.timedelta(days=3)).isoformat()
+    path = _write_placeholder_workout(workouts_dir, past_date, "Upper Body")
+    title = f"{past_date} Upper Body"
+
+    placeholder_workout = workout_from_note(path.read_text(), path.stem)
+    mock_client.create_note(FOLDER_WORKOUTS, title, render_workout_note_html(placeholder_workout))
+
+    with patch("coach.commands.assess.load_config", return_value=cfg):
+        _run_assess(
+            workout_title=title,
+            week=None,
+            dry_run=False,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    written = workout_from_note(path.read_text(), path.stem)
+    assert written.status == "skipped"
+    assert len(provider.calls) == 0
+
+
+def test_assess_single_skips_future_workout_regardless_of_content(tmp_path):
+    """_assess_single never touches a future-dated workout even when it has non-placeholder content.
+
+    Reproduces: ad-hoc note dated tomorrow that had its status incorrectly flipped to
+    'completed' by a previous sync (LLM hallucinated description from Planned text),
+    then assess ran and re-assessed it, reinforcing the corrupt state.
+    """
+    from coach.commands.assess import _run_assess
+    from coach.notes.parser import render_workout_note_html, workout_from_note
+    from coach.notes.schema import FOLDER_WORKOUTS
+
+    cfg = _make_config(str(tmp_path))
+    mock_client = MockNotesClient()
+    provider = MockInferenceProvider(response_text=MOCK_ASSESS_RESPONSE)
+
+    workouts_dir = tmp_path / "workouts"
+    workouts_dir.mkdir(parents=True, exist_ok=True)
+    future_date = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
+    # Simulate prior corruption: local file already has status="completed" (wrong)
+    # and how_it_went filled by a hallucinated LLM description
+    corrupted = f"""---
+id: wrk-future-001
+date: {future_date}
+type: strength
+status: completed
+note_title: {future_date} Future Workout
+source: manual
+---
+
+## Planned
+
+Squats 5x5.
+
+## Completed
+
+Fill in after the workout. Free text or match the planned format.
+
+## How It Went
+
+Hallucinated description from planned text.
+"""
+    (workouts_dir / f"{future_date}-future-workout.md").write_text(corrupted)
+    title = f"{future_date} Future Workout"
+    workout = workout_from_note(corrupted, title)
+    mock_client.create_note(FOLDER_WORKOUTS, title, render_workout_note_html(workout))
+
+    with patch("coach.commands.assess.load_config", return_value=cfg):
+        _run_assess(
+            workout_title=title,
+            week=None,
+            dry_run=False,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    # LLM must NOT be called — future workout must not be assessed
+    assert len(provider.calls) == 0
+    # Local file must be unchanged
+    on_disk = workout_from_note(
+        (workouts_dir / f"{future_date}-future-workout.md").read_text(), title
+    )
+    assert on_disk.status == "completed"  # wrong, but we don't fix stale corruption retroactively
+    assert on_disk.how_it_went == "Hallucinated description from planned text."
+
+
+def test_sync_future_ad_hoc_note_status_stays_planned(tmp_path):
+    """A future-dated ad-hoc note must never have its status flipped to 'completed' during sync.
+
+    Reproduces: _parse_free_form LLM branch hallucinating a 'description' from the
+    Planned section text and then using that to flip status → 'completed' for a workout
+    that hasn't happened yet.
+    """
+    import json
+
+    from coach.notes.local import _sync_notes
+    from coach.notes.parser import workout_from_note
+    from coach.notes.schema import FOLDER_WORKOUTS
+    from tests.notes.mock_client import MockNotesClient
+
+    cfg = _make_config(str(tmp_path))
+    client = MockNotesClient()
+    future_date = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
+    title = f"{future_date} Planned Squats"
+    # Ad-hoc note created in Apple Notes: only has Planned content, nothing completed yet
+    client.create_note(
+        FOLDER_WORKOUTS,
+        title,
+        "## Planned\n\nSquats 5x5, push-ups 3x10.\n",
+    )
+
+    # LLM hallucinates a description from the planned text
+    llm_response = json.dumps(
+        {
+            "type": "strength",
+            "duration_actual": 40,
+            "rpe": 6.5,
+            "description": "Squats and push-ups",
+        }
+    )
+    provider = MockInferenceProvider(response_text=llm_response)
+
+    _sync_notes(cfg, client, verbose=False, provider=provider)
+
+    workouts_dir = tmp_path / "workouts"
+    written = list(workouts_dir.glob(f"{future_date}-*.md"))
+    assert len(written) == 1
+    w = workout_from_note(written[0].read_text(), title)
+    assert w.status == "planned", f"Expected 'planned' for future note, got '{w.status}'"
+
+
+def test_assess_single_restores_planned_from_apple_notes(tmp_path):
+    """When local planned_content is missing, assess must restore it from Apple Notes.
+
+    Reproduces: corrupted local file (planned_content=None due to old sync bug) causing
+    assess's write-back to overwrite the real Apple Notes Planned section with the
+    placeholder comment.
+    """
+
+    from coach.commands.assess import _run_assess
+    from coach.notes.parser import workout_from_note
+    from coach.notes.schema import FOLDER_WORKOUTS
+
+    cfg = _make_config(str(tmp_path))
+    mock_client = MockNotesClient()
+    provider = MockInferenceProvider(response_text=MOCK_ASSESS_RESPONSE)
+
+    workouts_dir = tmp_path / "workouts"
+    workouts_dir.mkdir(parents=True, exist_ok=True)
+    past_date = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+    title = f"{past_date} Upper Body"
+
+    # Local file: planned_content is empty (simulates old-bug corruption)
+    corrupted_local = f"""---
+id: wrk-corrupt-001
+date: {past_date}
+type: strength
+status: planned
+note_title: {title}
+source: manual
+---
+
+## Planned
+
+
+
+## Completed
+
+Fill in after the workout. Free text or match the planned format.
+
+## How It Went
+
+Free text - RPE, PRs, how you felt.
+"""
+    (workouts_dir / f"{past_date}-upper-body.md").write_text(corrupted_local)
+
+    # Apple Notes still has the real Planned text (user's note was never truly lost there)
+    real_planned = "Bench Press 4x5 @ 185lb."
+    mock_client.create_note(
+        FOLDER_WORKOUTS,
+        title,
+        f"<h2>Planned</h2><p>{real_planned}</p>"
+        "<h2>Completed</h2><p>Bench Press 4x5 @ 185lb.</p>"
+        "<h2>How It Went</h2><p>Felt strong.</p>",
+    )
+
+    with patch("coach.commands.assess.load_config", return_value=cfg):
+        _run_assess(
+            workout_title=title,
+            week=None,
+            dry_run=False,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    # The Planned section must survive in Apple Notes (not replaced with placeholder)
+    notes_body = mock_client.get_note(FOLDER_WORKOUTS, title)
+    assert real_planned in notes_body, "Real Planned content was overwritten in Apple Notes"
+    # And local file too
+    on_disk = workout_from_note((workouts_dir / f"{past_date}-upper-body.md").read_text(), title)
+    assert on_disk.planned_content and real_planned in on_disk.planned_content
+
+
 def test_sync_auto_sync_notes_down(tmp_path):
     """NotesClientError during auto-sync is non-fatal; assess continues normally."""
     from coach.commands.assess import _run_assess
@@ -270,6 +580,39 @@ def test_sync_auto_sync_notes_down(tmp_path):
         )
     # auto-sync was attempted (list_notes called once) and failure was non-fatal
     assert mock_list.call_count == 1
+
+
+def test_auto_sync_prints_updated_count_separately(tmp_path):
+    """_sync_notes returning (0, 1) → message with count and 'update' printed."""
+    from unittest.mock import patch
+
+    from coach.commands.assess import _run_assess
+
+    cfg = _make_config(str(tmp_path))
+    cfg.notes.auto_sync = True
+
+    provider = MockInferenceProvider(response_text=MOCK_ASSESS_RESPONSE)
+    mock_client = MockNotesClient()
+    today = datetime.date.today()
+    iso = today.isocalendar()
+    week_str = f"{iso.year}-W{iso.week:02d}"
+
+    with (
+        patch("coach.commands.assess._sync_notes", return_value=(0, 1)) as mock_sync,
+        patch("coach.commands.assess.load_config", return_value=cfg),
+        patch("coach.commands.assess.console") as mock_console,
+    ):
+        _run_assess(
+            workout_title=None,
+            week=week_str,
+            dry_run=True,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    mock_sync.assert_called_once()
+    printed = " ".join(str(c) for c in mock_console.print.call_args_list)
+    assert "1" in printed and "update" in printed.lower()
 
 
 def test_sync_auto_sync_config_disabled(tmp_path):
