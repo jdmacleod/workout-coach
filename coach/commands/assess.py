@@ -161,9 +161,17 @@ def _assess_single(
     else:
         workout = dataclasses.replace(
             local_workout,
+            planned_content=sections.get("Planned") or local_workout.planned_content,
             completed_content=sections.get("Completed") or local_workout.completed_content,
             how_it_went=sections.get("How It Went") or local_workout.how_it_went,
         )
+
+    if workout.date > datetime.date.today():
+        console.print(
+            f"[dim]{title} — workout is in the future ({workout.date.isoformat()}); "
+            "skipping assessment.[/dim]"
+        )
+        return
 
     if (
         workout.status == "planned"
@@ -238,6 +246,10 @@ def _assess_week(
     # Assess each completed workout
     assessed: list[tuple[Workout, dict[str, Any]]] = []
     for w in weekly_workouts:
+        if w.date > datetime.date.today():
+            console.print(f"  [dim]Skipping {w.note_title} — workout is in the future[/dim]")
+            continue
+
         untouched = _is_placeholder_or_empty(w.completed_content) and _is_placeholder_or_empty(
             w.how_it_went
         )
