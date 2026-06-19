@@ -2,6 +2,19 @@
 
 All notable changes to Exercise Coach are documented here.
 
+## [0.9.0] — 2026-06-19
+
+### Added
+
+- **Equipment correction pass eval harness (T8)** — new unit tests verify that when the LLM generates a plan containing disallowed equipment (e.g., "cable machine"), the correction pass fires a second LLM call and the final workout files contain no equipment violations. Tests also verify no correction pass fires when no equipment is configured.
+- **Month-range glob optimisation (T6)** — `coach plan` now reads only the N months of workout files relevant to the planning window instead of globbing all `.md` files. Read set stays O(weeks) regardless of how many historical workout files exist. Added tests covering the cutoff boundary, rest-type exclusion, and the year-boundary December→January transition.
+- **Placeholder text harmonisation (T12)** — `_HOW_WENT_PLACEHOLDER_MD` now derives from `_HOW_WENT_PLACEHOLDER_NOTES`, so both the local `.md` render and the Apple Notes HTML render use identical human-readable wording. `_is_placeholder_or_empty` strips HTML comment markers before matching, shrinking `_PLACEHOLDER_STRINGS` from 4 entries to 3 (2 canonical + 1 legacy backward-compat).
+
+### Fixed
+
+- **LLM `duration_actual` coercion** — `int(result["duration_actual"])` now guards against boolean values (`true` from LLM JSON hallucination silently became `1` minute); changed to `int(float(...))` with an explicit `bool` exclusion.
+- **Named legacy placeholder constant** — the pre-T12 How It Went placeholder string is now `_LEGACY_HOW_WENT_PLACEHOLDER` rather than a bare string literal in the frozenset.
+
 ## [0.8.0] — 2026-06-15
 
 ### Added
