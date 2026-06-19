@@ -517,6 +517,27 @@ def test_placeholder_detection_none_and_empty(tmp_path: Path) -> None:
     assert _is_placeholder_or_empty("   ")
 
 
+def test_placeholder_detection_legacy_how_went_md(tmp_path: Path) -> None:
+    """Pre-T12 How It Went MD placeholder text is still recognised (backward compat)."""
+    from coach.notes.local import _is_placeholder_or_empty
+
+    old_placeholder = "<!-- Free text. The assessor will parse this for RPE, PRs, notes. -->"
+    assert _is_placeholder_or_empty(old_placeholder)
+
+
+def test_placeholder_detection_md_variants_derive_from_notes_variants() -> None:
+    """MD placeholder strings are HTML-comment-wrapped versions of the Notes strings."""
+    from coach.notes.parser import (
+        _COMPLETED_PLACEHOLDER_MD,
+        _COMPLETED_PLACEHOLDER_NOTES,
+        _HOW_WENT_PLACEHOLDER_MD,
+        _HOW_WENT_PLACEHOLDER_NOTES,
+    )
+
+    assert f"<!-- {_COMPLETED_PLACEHOLDER_NOTES} -->" == _COMPLETED_PLACEHOLDER_MD
+    assert f"<!-- {_HOW_WENT_PLACEHOLDER_NOTES} -->" == _HOW_WENT_PLACEHOLDER_MD
+
+
 # ── _maybe_update_local ───────────────────────────────────────────────────────
 
 

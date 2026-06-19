@@ -222,21 +222,37 @@ def _load_next_week_notes(cfg: Config, week: str, notes_client: NotesClient) -> 
 
 
 def _load_recent_workouts(cfg: Config, weeks: int = 5) -> list[Workout]:
-    """Glob last N weeks of workout files, returning Workout objects sorted by date."""
+    """Glob last N weeks of workout files, returning Workout objects sorted by date.
+
+    Globs YYYY-MM-*.md per month rather than *.md over all files, so the read
+    set stays O(weeks) regardless of total history size.
+    """
     workouts_dir = resolve_data_path(cfg, "workouts_dir")
     if not workouts_dir.exists():
         return []
-    cutoff = datetime.date.today() - datetime.timedelta(weeks=weeks)
+    today = datetime.date.today()
+    cutoff = today - datetime.timedelta(weeks=weeks)
+
+    # Collect the YYYY-MM patterns for every month in [cutoff, today]
+    months: list[str] = []
+    d = cutoff.replace(day=1)
+    while d <= today:
+        months.append(d.strftime("%Y-%m"))
+        d = d.replace(month=d.month + 1) if d.month < 12 else d.replace(year=d.year + 1, month=1)
+
+    seen: set[str] = set()
     workouts: list[Workout] = []
-    for path in sorted(workouts_dir.glob("*.md")):
-        try:
-            content = path.read_text()
-            w = workout_from_note(content, path.stem)
-            if w.date >= cutoff and w.type != "rest":
-                workouts.append(w)
-        except Exception as exc:
-            console.print(f"[dim]Warning: skipping {path.name} — {exc}[/dim]")
-            continue
+    for ym in months:
+        for path in sorted(workouts_dir.glob(f"{ym}-*.md")):
+            if path.name in seen:
+                continue
+            seen.add(path.name)
+            try:
+                w = workout_from_note(path.read_text(), path.stem)
+                if w.date >= cutoff and w.type != "rest":
+                    workouts.append(w)
+            except Exception as exc:
+                console.print(f"[dim]Warning: skipping {path.name} — {exc}[/dim]")
     return workouts
 
 
