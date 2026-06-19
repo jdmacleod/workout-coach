@@ -172,7 +172,7 @@ def _parse_free_form(
                 result["duration_actual"], bool
             ):
                 updates["duration_actual"] = int(float(result["duration_actual"]))
-            if result.get("rpe") is not None:
+            if result.get("rpe") is not None and not isinstance(result["rpe"], bool):
                 updates["rpe"] = float(result["rpe"])
             if result.get("description") and _is_placeholder_or_empty(base.how_it_went):
                 updates["how_it_went"] = str(result["description"])

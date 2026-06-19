@@ -910,3 +910,43 @@ def test_load_recent_workouts_excludes_rest_type(tmp_path: Path) -> None:
 
     result = _load_recent_workouts(cfg, weeks=5)
     assert result == []
+
+
+def test_load_recent_workouts_year_boundary(tmp_path: Path) -> None:
+    """Month iteration handles December→January year boundary without duplicates or gaps."""
+    from unittest.mock import patch
+
+    from coach.commands.plan import _load_recent_workouts
+
+    workouts_dir = tmp_path / "workouts"
+    workouts_dir.mkdir()
+
+    cfg = _make_config(str(tmp_path))
+
+    # Pin today to January 10 so the 5-week window spans December of the prior year
+    fixed_today = datetime.date(2026, 1, 10)
+    dec_date = datetime.date(2025, 12, 20)
+    jan_date = datetime.date(2026, 1, 5)
+
+    def _make_note(date: datetime.date, note_id: str) -> str:
+        return (
+            f"---\nid: {note_id}\ndate: {date.isoformat()}\ntype: strength\n"
+            "status: completed\nsource: manual\nnote_title: Test\n"
+            "duration_planned: \nduration_actual: \ndistance_km: \n"
+            "avg_hr: \nrpe: \nmood: \nsoreness: \ntags: \n---\n\n"
+            "## Planned\n\nTest\n\n## Completed\n\nDone\n\n## How It Went\n\nGood"
+        )
+
+    (workouts_dir / f"{dec_date.isoformat()}-strength.md").write_text(_make_note(dec_date, "dec"))
+    (workouts_dir / f"{jan_date.isoformat()}-strength.md").write_text(_make_note(jan_date, "jan"))
+
+    with patch("coach.commands.plan.datetime") as mock_dt:
+        mock_dt.date.today.return_value = fixed_today
+        mock_dt.date.fromisoformat = datetime.date.fromisoformat
+        mock_dt.timedelta = datetime.timedelta
+        result = _load_recent_workouts(cfg, weeks=5)
+
+    dates = [w.date for w in result]
+    assert dec_date in dates, "December workout should be within the 5-week window"
+    assert jan_date in dates, "January workout should be within the 5-week window"
+    assert dates == sorted(dates), "Results must be sorted by date"

@@ -366,6 +366,44 @@ def test_sync_no_provider_fallback(tmp_path: Path) -> None:
     assert "Did squats and lunges for 30 minutes." in content
 
 
+def test_parse_free_form_duration_actual_bool_rejected(tmp_path: Path) -> None:
+    """LLM returning JSON `true` for duration_actual must not write 1 minute."""
+    from coach.notes.local import _sync_notes
+
+    cfg = _make_cfg(tmp_path)
+    client = MockNotesClient()
+    title = "2026-06-12 Bool Test"
+    _put_note(client, title, "Short workout.")
+
+    llm_response = json.dumps({"type": "strength", "duration_actual": True, "rpe": 6.0})
+    provider = MockInferenceProvider(response_text=llm_response)
+
+    imported, _ = _sync_notes(cfg, client, verbose=False, provider=provider)
+    assert imported == 1
+    written = list((tmp_path / "workouts").glob("2026-06-12-*.md"))
+    content = written[0].read_text()
+    assert "duration_actual: 1\n" not in content
+
+
+def test_parse_free_form_duration_actual_string_coerced(tmp_path: Path) -> None:
+    """LLM returning a numeric string like \"45\" for duration_actual is coerced to int 45."""
+    from coach.notes.local import _sync_notes
+
+    cfg = _make_cfg(tmp_path)
+    client = MockNotesClient()
+    title = "2026-06-12 String Coerce"
+    _put_note(client, title, "Did some work.")
+
+    llm_response = json.dumps({"type": "strength", "duration_actual": "45", "rpe": 7.0})
+    provider = MockInferenceProvider(response_text=llm_response)
+
+    imported, _ = _sync_notes(cfg, client, verbose=False, provider=provider)
+    assert imported == 1
+    written = list((tmp_path / "workouts").glob("2026-06-12-*.md"))
+    content = written[0].read_text()
+    assert "duration_actual: 45\n" in content
+
+
 def test_sync_invalid_calendar_date_skipped(tmp_path: Path) -> None:
     """Note with regex-valid but calendar-invalid date (month 13) is skipped."""
     from coach.notes.local import _sync_notes

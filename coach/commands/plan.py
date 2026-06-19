@@ -225,7 +225,7 @@ def _load_recent_workouts(cfg: Config, weeks: int = 5) -> list[Workout]:
     """Glob last N weeks of workout files, returning Workout objects sorted by date.
 
     Globs YYYY-MM-*.md per month rather than *.md over all files, so the read
-    set stays O(weeks) regardless of total history size.
+    set stays O(months in window) regardless of total history size.
     """
     workouts_dir = resolve_data_path(cfg, "workouts_dir")
     if not workouts_dir.exists():
@@ -249,7 +249,7 @@ def _load_recent_workouts(cfg: Config, weeks: int = 5) -> list[Workout]:
                     workouts.append(w)
             except Exception as exc:
                 console.print(f"[dim]Warning: skipping {path.name} — {exc}[/dim]")
-    return workouts
+    return sorted(workouts, key=lambda w: w.date)
 
 
 def _load_history_summary(cfg: Config, weeks: int = 4) -> str:
