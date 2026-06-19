@@ -47,12 +47,14 @@ _SLUG_MAX_LEN = 40
 _MAX_COLLISION_SUFFIX = 99
 _WORKOUT_TEMPLATE_TITLE = "Template — Workout"
 
+_LEGACY_HOW_WENT_PLACEHOLDER = "Free text. The assessor will parse this for RPE, PRs, notes."
+
 _PLACEHOLDER_STRINGS: frozenset[str] = frozenset(
     {
         _COMPLETED_PLACEHOLDER_NOTES,
         _HOW_WENT_PLACEHOLDER_NOTES,
         # Legacy: How It Went MD text written before T12 harmonization
-        "Free text. The assessor will parse this for RPE, PRs, notes.",
+        _LEGACY_HOW_WENT_PLACEHOLDER,
     }
 )
 
@@ -166,8 +168,10 @@ def _parse_free_form(
 
             if result.get("type") in _VALID_WORKOUT_TYPES:
                 updates["type"] = result["type"]
-            if result.get("duration_actual") is not None:
-                updates["duration_actual"] = int(result["duration_actual"])
+            if result.get("duration_actual") is not None and not isinstance(
+                result["duration_actual"], bool
+            ):
+                updates["duration_actual"] = int(float(result["duration_actual"]))
             if result.get("rpe") is not None:
                 updates["rpe"] = float(result["rpe"])
             if result.get("description") and _is_placeholder_or_empty(base.how_it_went):

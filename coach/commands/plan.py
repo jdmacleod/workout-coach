@@ -240,13 +240,9 @@ def _load_recent_workouts(cfg: Config, weeks: int = 5) -> list[Workout]:
         months.append(d.strftime("%Y-%m"))
         d = d.replace(month=d.month + 1) if d.month < 12 else d.replace(year=d.year + 1, month=1)
 
-    seen: set[str] = set()
     workouts: list[Workout] = []
     for ym in months:
         for path in sorted(workouts_dir.glob(f"{ym}-*.md")):
-            if path.name in seen:
-                continue
-            seen.add(path.name)
             try:
                 w = workout_from_note(path.read_text(), path.stem)
                 if w.date >= cutoff and w.type != "rest":

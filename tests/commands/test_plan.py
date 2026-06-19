@@ -829,6 +829,8 @@ def test_correction_pass_fires_on_equipment_violation(tmp_path: Path) -> None:
 
     # Correction pass fired — provider was called at least twice
     assert len(provider.calls) >= 2
+    # Correction prompt includes the equipment constraint
+    assert any("dumbbells" in call.user.lower() for call in provider.calls[1:])
 
     # Final workout files don't reference cable machine
     for path in (tmp_path / "workouts").glob("*.md"):

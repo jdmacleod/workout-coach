@@ -538,6 +538,14 @@ def test_placeholder_detection_md_variants_derive_from_notes_variants() -> None:
     assert f"<!-- {_HOW_WENT_PLACEHOLDER_NOTES} -->" == _HOW_WENT_PLACEHOLDER_MD
 
 
+def test_placeholder_detection_html_comment_non_placeholder_returns_false() -> None:
+    """User-written HTML comments that aren't placeholder text should not be treated as empty."""
+    from coach.notes.local import _is_placeholder_or_empty
+
+    assert not _is_placeholder_or_empty("<!-- This is my own note about the workout -->")
+    assert not _is_placeholder_or_empty("<!-- RPE 7, felt strong -->")
+
+
 # ── _maybe_update_local ───────────────────────────────────────────────────────
 
 
