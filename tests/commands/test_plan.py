@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import datetime
 import json
 from pathlib import Path
 from unittest.mock import patch
 
-from coach.config import Config, DataConfig, NotesConfig
+from coach.config import Config, DataConfig, NotesConfig, ProfileConfig
+from coach.intelligence.provider import InferenceRequest, InferenceResponse
 from coach.notes.schema import FOLDER_PLANS
 from tests.intelligence.mock_provider import MockInferenceProvider
 from tests.notes.mock_client import MockNotesClient
@@ -740,3 +742,211 @@ def test_plan_collision_reassignment_avoids_recurring_class_day(tmp_path):
     assert len(lower_body_files) == 1
     assert "2026-06-16" not in lower_body_files[0].name
     assert "2026-06-17" in lower_body_files[0].name
+
+
+# ── T8: Equipment constraint correction pass ──────────────────────────────────
+
+
+class _MultiResponseProvider:
+    """Test provider that returns different responses per call."""
+
+    def __init__(self, responses: list[str]) -> None:
+        self.responses = responses
+        self.calls: list[InferenceRequest] = []
+
+    def infer(self, request: InferenceRequest) -> InferenceResponse:
+        self.calls.append(request)
+        idx = min(len(self.calls) - 1, len(self.responses) - 1)
+        return InferenceResponse(text=self.responses[idx], provider="mock", model="mock")
+
+    def is_available(self) -> bool:
+        return True
+
+    def provider_name(self) -> str:
+        return "mock"
+
+    def display_name(self) -> str:
+        return "mock / mock"
+
+
+_VIOLATING_PLAN = json.dumps(
+    {
+        "training_focus": "strength",
+        "weekly_volume": "moderate",
+        "generation_notes": "Using cable machines.",
+        "sessions": [
+            {
+                "day": "Mon",
+                "type": "strength",
+                "subtype": "upper",
+                "duration_minutes": 45,
+                "title": "Cable Machine Upper",
+                "planned_content": "Cable machine rows: 4x12, cable machine press: 3x10",
+                "rationale": "Upper body with cable machine",
+            },
+            {
+                "day": "Wed",
+                "type": "cardio",
+                "subtype": "zone2",
+                "duration_minutes": 30,
+                "title": "Cardio",
+                "planned_content": "Easy run 30 min",
+                "rationale": "Aerobic base",
+            },
+        ],
+    }
+)
+
+
+def _make_config_with_equipment(tmp_dir: str, equipment: list[str]) -> Config:
+    cfg = _make_config(tmp_dir)
+    cfg.profile = ProfileConfig(available_equipment=equipment)
+    return cfg
+
+
+def test_correction_pass_fires_on_equipment_violation(tmp_path: Path) -> None:
+    """When the LLM generates a plan violating equipment constraints, the correction
+    pass calls the provider a second time and the final plan uses only allowed gear."""
+    from coach.commands.plan import _run_plan
+
+    cfg = _make_config_with_equipment(str(tmp_path), ["dumbbells"])
+    (tmp_path / "training-info.md").write_text("# Training Info\nGeneral fitness.")
+    mock_client = MockNotesClient()
+
+    # First call: violating plan (cable machine). Second call: corrected plan (no violations).
+    provider = _MultiResponseProvider([_VIOLATING_PLAN, MOCK_PLAN_RESPONSE])
+
+    with patch("coach.commands.plan.load_config", return_value=cfg):
+        _run_plan(
+            week="2026-W23",
+            focus=None,
+            dry_run=False,
+            overwrite=False,
+            no_calendar=True,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    # Correction pass fired — provider was called at least twice
+    assert len(provider.calls) >= 2
+    # Correction prompt includes the equipment constraint
+    assert any("dumbbells" in call.user.lower() for call in provider.calls[1:])
+
+    # Final workout files don't reference cable machine
+    for path in (tmp_path / "workouts").glob("*.md"):
+        content = path.read_text().lower()
+        assert "cable machine" not in content, f"Equipment violation in {path.name}"
+
+
+def test_no_correction_pass_without_equipment_constraint(tmp_path: Path) -> None:
+    """When no equipment is configured, the correction pass is skipped entirely."""
+    from coach.commands.plan import _run_plan
+
+    cfg = _make_config(str(tmp_path))  # no equipment in profile
+    (tmp_path / "training-info.md").write_text("# Training Info\nGeneral fitness.")
+    mock_client = MockNotesClient()
+    provider = MockInferenceProvider(response_text=MOCK_PLAN_RESPONSE)
+
+    with patch("coach.commands.plan.load_config", return_value=cfg):
+        _run_plan(
+            week="2026-W23",
+            focus=None,
+            dry_run=False,
+            overwrite=False,
+            no_calendar=True,
+            notes_client=mock_client,
+            inference_provider=provider,
+        )
+
+    # Only one LLM call — no correction pass
+    assert len(provider.calls) == 1
+
+
+# ── T6: Month-range glob optimisation ────────────────────────────────────────
+
+
+def test_load_recent_workouts_only_returns_files_within_cutoff(tmp_path: Path) -> None:
+    """_load_recent_workouts returns only workouts within the N-week window
+    and ignores older files, regardless of how many historical files exist."""
+    from coach.commands.plan import _load_recent_workouts
+
+    workouts_dir = tmp_path / "workouts"
+    workouts_dir.mkdir()
+
+    cfg = _make_config(str(tmp_path))
+
+    today = datetime.date.today()
+
+    # Write a file that falls within the window
+    recent_date = today - datetime.timedelta(days=7)
+    recent_content = f"---\nid: wrk-recent\ndate: {recent_date.isoformat()}\ntype: strength\nstatus: completed\nsource: manual\nnote_title: Recent Workout\nduration_planned: \nduration_actual: \ndistance_km: \navg_hr: \nrpe: \nmood: \nsoreness: \ntags: \n---\n\n## Planned\n\nTest\n\n## Completed\n\nDone\n\n## How It Went\n\nGood"
+    (workouts_dir / f"{recent_date.isoformat()}-strength.md").write_text(recent_content)
+
+    # Write a file that falls outside the window (6+ weeks ago)
+    old_date = today - datetime.timedelta(weeks=6, days=1)
+    old_content = f"---\nid: wrk-old\ndate: {old_date.isoformat()}\ntype: strength\nstatus: completed\nsource: manual\nnote_title: Old Workout\nduration_planned: \nduration_actual: \ndistance_km: \navg_hr: \nrpe: \nmood: \nsoreness: \ntags: \n---\n\n## Planned\n\nTest\n\n## Completed\n\nDone\n\n## How It Went\n\nGood"
+    (workouts_dir / f"{old_date.isoformat()}-strength.md").write_text(old_content)
+
+    result = _load_recent_workouts(cfg, weeks=5)
+
+    # Only the recent workout is returned
+    assert len(result) == 1
+    assert result[0].date == recent_date
+
+
+def test_load_recent_workouts_excludes_rest_type(tmp_path: Path) -> None:
+    """Rest-type workouts are excluded even when within the date window."""
+    from coach.commands.plan import _load_recent_workouts
+
+    workouts_dir = tmp_path / "workouts"
+    workouts_dir.mkdir()
+
+    cfg = _make_config(str(tmp_path))
+    today = datetime.date.today()
+    recent_date = today - datetime.timedelta(days=3)
+
+    rest_content = f"---\nid: wrk-rest\ndate: {recent_date.isoformat()}\ntype: rest\nstatus: planned\nsource: generated\nnote_title: Rest Day\nduration_planned: \nduration_actual: \ndistance_km: \navg_hr: \nrpe: \nmood: \nsoreness: \ntags: \n---\n\n## Planned\n\nRest\n\n## Completed\n\n## How It Went\n\n"
+    (workouts_dir / f"{recent_date.isoformat()}-rest.md").write_text(rest_content)
+
+    result = _load_recent_workouts(cfg, weeks=5)
+    assert result == []
+
+
+def test_load_recent_workouts_year_boundary(tmp_path: Path) -> None:
+    """Month iteration handles December→January year boundary without duplicates or gaps."""
+    from unittest.mock import patch
+
+    from coach.commands.plan import _load_recent_workouts
+
+    workouts_dir = tmp_path / "workouts"
+    workouts_dir.mkdir()
+
+    cfg = _make_config(str(tmp_path))
+
+    # Pin today to January 10 so the 5-week window spans December of the prior year
+    fixed_today = datetime.date(2026, 1, 10)
+    dec_date = datetime.date(2025, 12, 20)
+    jan_date = datetime.date(2026, 1, 5)
+
+    def _make_note(date: datetime.date, note_id: str) -> str:
+        return (
+            f"---\nid: {note_id}\ndate: {date.isoformat()}\ntype: strength\n"
+            "status: completed\nsource: manual\nnote_title: Test\n"
+            "duration_planned: \nduration_actual: \ndistance_km: \n"
+            "avg_hr: \nrpe: \nmood: \nsoreness: \ntags: \n---\n\n"
+            "## Planned\n\nTest\n\n## Completed\n\nDone\n\n## How It Went\n\nGood"
+        )
+
+    (workouts_dir / f"{dec_date.isoformat()}-strength.md").write_text(_make_note(dec_date, "dec"))
+    (workouts_dir / f"{jan_date.isoformat()}-strength.md").write_text(_make_note(jan_date, "jan"))
+
+    with patch("coach.commands.plan.datetime") as mock_dt:
+        mock_dt.date.today.return_value = fixed_today
+        mock_dt.date.fromisoformat = datetime.date.fromisoformat
+        mock_dt.timedelta = datetime.timedelta
+        result = _load_recent_workouts(cfg, weeks=5)
+
+    dates = [w.date for w in result]
+    assert dec_date in dates, "December workout should be within the 5-week window"
+    assert jan_date in dates, "January workout should be within the 5-week window"
+    assert dates == sorted(dates), "Results must be sorted by date"

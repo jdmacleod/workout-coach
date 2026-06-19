@@ -2,6 +2,22 @@
 
 All notable changes to Exercise Coach are documented here.
 
+## [0.9.0] — 2026-06-19
+
+### Added
+
+- **Faster plan generation on large datasets (T6)** — `coach plan` now reads only the months of workout history relevant to the planning window instead of scanning all `.md` files. Planning stays fast regardless of how many historical workout files you have accumulated.
+- **Consistent How It Went placeholder text (T12)** — the placeholder text in local `.md` files and Apple Notes HTML now matches exactly. Sync detection is more reliable: the "is this a placeholder?" check strips HTML comment wrappers before comparing, so no real workout entry is mistaken for a placeholder.
+
+### Fixed
+
+- **Workout duration coercion** — a LLM that returns `true` instead of a number for `duration_actual` no longer silently records the session as 1 minute. The coercion now rejects boolean values and converts numeric strings via `float()` before truncating to `int`.
+
+### For contributors
+
+- **Equipment correction pass eval harness (T8)** — new unit tests verify that when the LLM generates a plan containing disallowed equipment (e.g., "cable machine"), the correction pass fires a second LLM call and the final workout files contain no equipment violations. Tests also verify no correction pass fires when no equipment is configured.
+- **Named legacy placeholder constant** — the pre-T12 How It Went placeholder string is now `_LEGACY_HOW_WENT_PLACEHOLDER` rather than a bare string literal in the frozenset.
+
 ## [0.8.0] — 2026-06-15
 
 ### Added

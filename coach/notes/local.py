@@ -19,9 +19,7 @@ from coach.models.workout import Workout
 from coach.notes.client import NotesClient
 from coach.notes.exceptions import NotesClientError
 from coach.notes.parser import (
-    _COMPLETED_PLACEHOLDER_MD,
     _COMPLETED_PLACEHOLDER_NOTES,
-    _HOW_WENT_PLACEHOLDER_MD,
     _HOW_WENT_PLACEHOLDER_NOTES,
     parse_sections,
     render_workout_note,
@@ -49,20 +47,28 @@ _SLUG_MAX_LEN = 40
 _MAX_COLLISION_SUFFIX = 99
 _WORKOUT_TEMPLATE_TITLE = "Template — Workout"
 
+_LEGACY_HOW_WENT_PLACEHOLDER = "Free text. The assessor will parse this for RPE, PRs, notes."
+
 _PLACEHOLDER_STRINGS: frozenset[str] = frozenset(
     {
-        _COMPLETED_PLACEHOLDER_MD,
-        _HOW_WENT_PLACEHOLDER_MD,
         _COMPLETED_PLACEHOLDER_NOTES,
         _HOW_WENT_PLACEHOLDER_NOTES,
+        # Legacy: How It Went MD text written before T12 harmonization
+        _LEGACY_HOW_WENT_PLACEHOLDER,
     }
 )
+
+_HTML_COMMENT_RE = re.compile(r"^<!--\s*(.*?)\s*-->$")
 
 
 def _is_placeholder_or_empty(text: str | None) -> bool:
     if not text or not text.strip():
         return True
-    return text.strip() in _PLACEHOLDER_STRINGS
+    cleaned = text.strip()
+    m = _HTML_COMMENT_RE.match(cleaned)
+    if m:
+        cleaned = m.group(1).strip()
+    return cleaned in _PLACEHOLDER_STRINGS
 
 
 def _maybe_update_local(
@@ -162,9 +168,11 @@ def _parse_free_form(
 
             if result.get("type") in _VALID_WORKOUT_TYPES:
                 updates["type"] = result["type"]
-            if result.get("duration_actual") is not None:
-                updates["duration_actual"] = int(result["duration_actual"])
-            if result.get("rpe") is not None:
+            if result.get("duration_actual") is not None and not isinstance(
+                result["duration_actual"], bool
+            ):
+                updates["duration_actual"] = int(float(result["duration_actual"]))
+            if result.get("rpe") is not None and not isinstance(result["rpe"], bool):
                 updates["rpe"] = float(result["rpe"])
             if result.get("description") and _is_placeholder_or_empty(base.how_it_went):
                 updates["how_it_went"] = str(result["description"])

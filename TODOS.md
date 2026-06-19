@@ -8,18 +8,7 @@ Items deferred from current scope. Each item includes context, motivation, and a
 
 ---
 
-## T12 — Harmonize "How It Went" placeholder text across MD and HTML renders
-**Priority:** P3 | **Effort:** XS (human: ~5min / CC: ~2min)
-
-**What:** `parser.py:187` writes `<!-- Free text. The assessor will parse this for RPE, PRs, notes. -->` to local `.md` files, while `parser.py:460` uses `"Free text - RPE, PRs, how you felt."` as the Apple Notes HTML italic placeholder. These are different strings with different wording.
-
-**Why:** The mismatch is cosmetic and handled correctly by `_PLACEHOLDER_STRINGS` frozenset (both variants are included). But it's confusing to maintain two different placeholder texts for the same field in two formats.
-
-**Context:** Surfaced during the eng review for T11 (iPhone smart sync gate, 2026-06-15). The fix is to pick one authoritative text and use it in both `render_workout_note` and `render_workout_note_html` for the How It Went section. Would shrink the `_PLACEHOLDER_STRINGS` frozenset from 4 strings to 2 after this is harmonized.
-
-**Start:** `coach/notes/parser.py:187` and `coach/notes/parser.py:460`.
-
-**Depends on:** T11 shipped first (placeholder detection already handles the split).
+## ~~T12~~ — Harmonize "How It Went" placeholder text across MD and HTML renders ✓ COMPLETED in v0.9.0
 
 ---
 
@@ -98,30 +87,8 @@ Items deferred from current scope. Each item includes context, motivation, and a
 
 ---
 
-## T6 — Optimize load_workouts() glob for large datasets
-**Priority:** P3 | **Effort:** S (human: ~30min / CC: ~5min)
-
-**What:** Instead of globbing `data/workouts/*.md` and filtering in Python by date, generate date-range glob patterns for only the N relevant weeks and glob those directly.
-
-**Why:** After 2 years of training (~100+ files), `coach plan` reads and parses all workout files just to filter to the last 4 weeks. Small optimization, but clean.
-
-**Context:** `load_workouts()` is the shared helper used by `coach plan`, `coach report`, and `coach status`. The simplest fix: compute ISO week date ranges, glob `data/workouts/YYYY-MM-*.md` per week, union the matches.
-
-**Start:** `coach/commands/plan.py` (or wherever `load_workouts()` lives).
-
-**Depends on:** Nothing — isolated to the glob + filter pattern.
+## ~~T6~~ — Optimize load_workouts() glob for large datasets ✓ COMPLETED in v0.9.0
 
 ---
 
-## T8 — Eval harness for LLM constraint validation
-**Priority:** P3 | **Effort:** M (human: ~1 day / CC: ~20min)
-
-**What:** An automated eval (or manual checklist) that runs `coach plan --dry-run` against a real LLM and asserts the generated plan respects equipment and duration constraints. For example: given equipment=["barbell","pull-up bar"] and max_session_duration=30, verify no session references a bench and no session exceeds 30 min.
-
-**Why:** The unit tests (T7) verify that equipment/duration text appears in the prompt and that the correction pass fires. They don't verify that the LLM actually produces valid plans. If the prompt is revised and constraints stop being respected, there's no automated catch.
-
-**Context:** Requires a live LLM call (cannot be mocked for the quality signal). Could be a pytest integration test (marked with `@pytest.mark.integration`) that calls `_run_plan` with a MockInferenceProvider that returns known-bad responses, verifying the correction pass fires and fixes them. True end-to-end eval requires a real provider and is manual for now.
-
-**Start:** `tests/commands/test_plan.py` — add integration-marked tests using a "violating provider" mock that returns a plan with bench press. Verify the correction pass fires and the final plan doesn't contain bench press.
-
-**Depends on:** Correction pass shipped in v0.4.1 — dependency met.
+## ~~T8~~ — Eval harness for LLM constraint validation ✓ COMPLETED in v0.9.0

@@ -29,12 +29,13 @@ if TYPE_CHECKING:
 # ── Workout section placeholder strings ──────────────────────────────────────
 # These are exported so local.py can detect placeholder content without
 # duplicating the strings that render_workout_note / render_workout_note_html write.
-_COMPLETED_PLACEHOLDER_MD = (
-    "<!-- Fill in after the workout. Free text or match the planned format. -->"
-)
-_HOW_WENT_PLACEHOLDER_MD = "<!-- Free text. The assessor will parse this for RPE, PRs, notes. -->"
+# MD variants wrap the same human-readable text in HTML comments; local.py strips
+# those comments before matching so only two canonical strings need to be in the
+# _PLACEHOLDER_STRINGS frozenset.
 _COMPLETED_PLACEHOLDER_NOTES = "Fill in after the workout. Free text or match the planned format."
 _HOW_WENT_PLACEHOLDER_NOTES = "Free text - RPE, PRs, how you felt."
+_COMPLETED_PLACEHOLDER_MD = f"<!-- {_COMPLETED_PLACEHOLDER_NOTES} -->"
+_HOW_WENT_PLACEHOLDER_MD = f"<!-- {_HOW_WENT_PLACEHOLDER_NOTES} -->"
 
 # ── Exercise set parsing ──────────────────────────────────────────────────────
 
